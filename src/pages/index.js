@@ -14,9 +14,6 @@ const headingStyles = {
 const headingAccentStyles = {
   color: "#663399",
 }
-const paragraphStyles = {
-  marginBottom: 48,
-}
 const listStyles = {
   marginBottom: 96,
   paddingLeft: 0,
@@ -75,6 +72,14 @@ const links = [
       "",
     color: "#1099A8",
   },
+  {
+    text: "Arcade",
+    url: "/arcade",
+    description: "",
+    color: "#088413",
+    badge: true
+
+  }
 ]
 
 const year = new Date().getFullYear();
