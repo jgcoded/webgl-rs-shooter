@@ -5,15 +5,17 @@ authors = ["Julio Gutierrez"]
 edition = "2018"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [features]
-default = ["console_error_panic_hook"]
+default = ["console_error_panic_hook", "wee_alloc"]
 
 [dependencies]
-wasm-bindgen = "0.2.63"
+wasm-bindgen = "0.2.78"
+js-sys = "0.3.55"
+web-sys = { version = "0.3.55", features = ['console', 'Document', 'Element', 'HtmlCanvasElement', 'WebGlBuffer', 'WebGlVertexArrayObject', 'WebGl2RenderingContext', 'WebGlProgram', 'WebGlShader', 'WebGlUniformLocation', 'Window'] }
 
-# The `console_error_panic_hook` crate provides better debugging of panics by
+# The `console_error_panic_hook` rlibcrate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.

@@ -1,6 +1,14 @@
-mod utils;
 
-use wasm_bindgen::prelude::*;
+mod utils;
+mod shader;
+mod vector;
+mod matrix;
+mod buffer;
+
+pub mod tank_game;
+
+use wasm_bindgen::{prelude::*};
+use web_sys::{console};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -9,11 +17,14 @@ use wasm_bindgen::prelude::*;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
-extern {
-    fn alert(s: &str);
+extern "C" {
+    // fn alert(s: &str);
 }
 
 #[wasm_bindgen]
 pub fn greet() {
-    alert("Hello, me!");
+    // test
+    console::log_1(&"Hello, World!".into());
 }
+
+

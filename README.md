@@ -1,54 +1,36 @@
-<p align="center">
-  <a href="https://www.gatsbyjs.com/?utm_source=starter&utm_medium=readme&utm_campaign=minimal-starter">
-    <img alt="Gatsby" src="https://www.gatsbyjs.com/Gatsby-Monogram.svg" width="60" />
-  </a>
-</p>
-<h1 align="center">
-  Gatsby minimal starter
-</h1>
+# Personal Site
 
-## 🚀 Quick start
+https://rustwasm.github.io/docs/wasm-pack/quickstart.html
 
-1.  **Create a Gatsby site.**
+https://github.com/wasm-tool/wasm-pack-plugin
 
-    Use the Gatsby CLI to create a new site, specifying the minimal starter.
+https://rustwasm.github.io/wasm-bindgen/examples/hello-world.html
 
-    ```shell
-    # create a new Gatsby site using the minimal starter
-    npm init gatsby
-    ```
+https://rustwasm.github.io/wasm-bindgen/examples/request-animation-frame.html
 
-2.  **Start developing.**
+https://rustwasm.github.io/book/game-of-life/implementing.html
 
-    Navigate into your new site’s directory and start it up.
+https://rustwasm.github.io/wasm-bindgen/examples/2d-canvas.html
 
-    ```shell
-    cd my-gatsby-site/
-    npm run develop
-    ```
+https://rustwasm.github.io/wasm-bindgen/examples/webgl.html
 
-3.  **Open the code and start customizing!**
+https://github.com/rustwasm/wasm-bindgen/blob/main/examples/webgl/src/lib.rs
 
-    Your site is now running at http://localhost:8000!
+https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/testing-your-project.html
 
-    Edit `src/pages/index.js` to see your site update in real-time!
+https://github.com/rustwasm/create-wasm-app/blob/master/package.json
 
-4.  **Learn more**
+https://github.com/SimonDarksideJ/XNAGameStudio/wiki/Riemers2DXNAoverview
 
-    - [Documentation](https://www.gatsbyjs.com/docs/?utm_source=starter&utm_medium=readme&utm_campaign=minimal-starter)
 
-    - [Tutorials](https://www.gatsbyjs.com/tutorial/?utm_source=starter&utm_medium=readme&utm_campaign=minimal-starter)
+https://docs.rs/js-sys/0.3.55/js_sys/struct.Float32Array.html
 
-    - [Guides](https://www.gatsbyjs.com/tutorial/?utm_source=starter&utm_medium=readme&utm_campaign=minimal-starter)
 
-    - [API Reference](https://www.gatsbyjs.com/docs/api-reference/?utm_source=starter&utm_medium=readme&utm_campaign=minimal-starter)
+https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/bufferData
 
-    - [Plugin Library](https://www.gatsbyjs.com/plugins?utm_source=starter&utm_medium=readme&utm_campaign=minimal-starter)
 
-    - [Cheat Sheet](https://www.gatsbyjs.com/docs/cheat-sheet/?utm_source=starter&utm_medium=readme&utm_campaign=minimal-starter)
+https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/template-deep-dive/tests-web-rs.html
 
-## 🚀 Quick start (Gatsby Cloud)
+https://rustwasm.github.io/docs/wasm-bindgen/contributing/js-sys/testing.html
 
-Deploy this starter with one click on [Gatsby Cloud](https://www.gatsbyjs.com/cloud/):
-
-[<img src="https://www.gatsbyjs.com/deploynow.svg" alt="Deploy to Gatsby Cloud">](https://www.gatsbyjs.com/dashboard/deploynow?url=https://github.com/gatsbyjs/gatsby-starter-minimal)
+https://webpack.js.org/guides/asset-management/
