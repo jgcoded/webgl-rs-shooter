@@ -35,6 +35,7 @@ pub fn get_canvas(canvas_id: &str) -> Result<HtmlCanvasElement, JsValue> {
 
 pub fn get_rendering_context(canvas: &HtmlCanvasElement) -> Result<WebGl2RenderingContext, JsValue> {
     
+    // set per MDN docs
     canvas.set_width(canvas.client_width().try_into().unwrap());
     canvas.set_height(canvas.client_height().try_into().unwrap());
 
@@ -43,6 +44,15 @@ pub fn get_rendering_context(canvas: &HtmlCanvasElement) -> Result<WebGl2Renderi
         .unwrap()
         .dyn_into::<web_sys::WebGl2RenderingContext>()?;
 
+    /*
+        When you first create a WebGL context,
+        the size of the viewport will match
+        the size of the canvas. However,
+        if you resize the canvas, you will
+        need to tell the WebGL context a new
+        viewport setting. In this situation,
+        you can use gl.viewport. 
+    */
     gl.viewport(0, 0, gl.drawing_buffer_width(), gl.drawing_buffer_height());
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
@@ -50,7 +60,7 @@ pub fn get_rendering_context(canvas: &HtmlCanvasElement) -> Result<WebGl2Renderi
     Ok(gl)
 }
 
-pub fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+pub fn request_animation_frame(f: &Closure<dyn FnMut(&JsValue)>) {
     window()
         .request_animation_frame(f.as_ref().unchecked_ref())
         .expect("should register `requestAnimationFrame` OK");

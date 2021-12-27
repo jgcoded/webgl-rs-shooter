@@ -40,13 +40,19 @@ pub fn tank_game(canvas_id: &str) -> Result<(), JsValue> {
 
     let mut game = initialize(&canvas, &gl)?;
 
-    *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
-        update(&mut game);
+    *g.borrow_mut() = Some(Closure::wrap(Box::new(move |t: &JsValue| {
+        
+        let timestamp = match t.as_f64() {
+            Some(t) => t,
+            _ => 0.0
+        };
+        
+        update(&mut game, timestamp);
 
         render(&gl, &game);
 
         request_animation_frame(f.borrow().as_ref().unwrap());
-    }) as Box<dyn FnMut()>));
+    }) as Box<dyn FnMut(&JsValue)>));
     
     request_animation_frame(g.borrow().as_ref().unwrap());
 
@@ -137,8 +143,16 @@ void main(void) {
     })
 }
 
-fn update(game: &mut TankGameFlyweight) {
+fn update(game: &mut TankGameFlyweight, timestamp: f64) {
+    let x = 0.0;// 0.8*(timestamp / 1000.0).cos();
+    let y = 0.0; //0.8*(timestamp / 1000.0).sin();
+    let translate = Mat4::translation(x as f32, y as f32, -2.4);
 
+    let scale = Mat4::scale(1024.0/768.0, 1.0, 1.0);
+
+    let rotation = Mat4::identity(); // Mat4::rotate(45.0*x as f32, 45.0*y as f32, 45.0);
+
+    game.model_view = rotation * scale * translate;
 }
 
 fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
