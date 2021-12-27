@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "create an app to consume rust-generated wasm packages",
   "scripts": {
-    "build": "webpack",
+    "build": "webpack && cp -r assets/ dist/assets/",
     "serve": "webpack serve"
   },
   "repository": {

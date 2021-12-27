@@ -2,12 +2,9 @@
 import './site.css';
 import '@fortawesome/fontawesome-free/js/fontawesome'
 import '@fortawesome/fontawesome-free/js/brands';
-import tankGameImage from './images/tank.jpg';
 
 import { greet, tank_game } from './pkg';
 greet();
-
-document.getElementById('tank-game-img').src = tankGameImage;
 
 function hashHandler() {
   navigate();

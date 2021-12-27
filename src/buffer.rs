@@ -49,3 +49,19 @@ pub fn create_color_buffer(
 
     create_buffer(gl, data)
 }
+
+pub fn create_texture_buffer(
+    gl: &WebGl2RenderingContext
+) -> Result<WebGlBuffer, JsValue> {
+    let texture_coordinates = [
+        0.0f32,  0.0f32,
+        1.0f32,  0.0f32,
+        1.0f32,  1.0f32,
+        0.0f32,  1.0f32,
+    ];
+
+    let data = js_sys::Float32Array::new_with_length(8);
+    data.copy_from(&texture_coordinates);
+
+    create_buffer(gl, data)
+}

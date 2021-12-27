@@ -4,6 +4,7 @@ mod shader;
 mod vector;
 mod matrix;
 mod buffer;
+mod texture;
 
 pub mod tank_game;
 

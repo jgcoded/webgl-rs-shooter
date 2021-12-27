@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 
 use js_sys::Float32Array;
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
 use web_sys::{WebGl2RenderingContext, HtmlCanvasElement};
 
 use crate::{vector::Vec3, matrix::Mat4};
@@ -48,6 +48,12 @@ pub fn get_rendering_context(canvas: &HtmlCanvasElement) -> Result<WebGl2Renderi
     gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
 
     Ok(gl)
+}
+
+pub fn request_animation_frame(f: &Closure<dyn FnMut()>) {
+    window()
+        .request_animation_frame(f.as_ref().unchecked_ref())
+        .expect("should register `requestAnimationFrame` OK");
 }
 
 impl Vec3 {

@@ -1,5 +1,7 @@
 # Personal Site
 
+MDN on best practices for webgl performance: https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices
+
 https://rustwasm.github.io/docs/wasm-pack/quickstart.html
 
 https://github.com/wasm-tool/wasm-pack-plugin
