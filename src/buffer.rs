@@ -13,6 +13,7 @@ pub fn create_buffer(
         &data,
         WebGl2RenderingContext::STATIC_DRAW);
 
+    gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, None);
     Ok(buffer)
 }
 
@@ -31,7 +32,6 @@ pub fn create_square_buffer(
     data.copy_from(&positions);
 
     create_buffer(gl, data)
-
 }
 
 pub fn create_color_buffer(

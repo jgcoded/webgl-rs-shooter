@@ -3,7 +3,7 @@ use std::ops::Mul;
 pub struct Mat4 {
     data: [f32; 16],
 }
-
+// TODO camera LookAt matrix https://learnopengl.com/Getting-started/Camera
 impl Mat4 {
     pub fn new(values: [f32; 16]) -> Mat4 {
         Mat4 { data: values }
@@ -40,6 +40,15 @@ impl Mat4 {
         ])
     }
 
+    pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
+        Mat4::new([
+            2.0 / (right - left), 0.0, 0.0, -(right + left)/(right-left),
+            0.0, 2.0/(top-bottom), 0.0, -(top+bottom)/(top-bottom),
+            0.0, 0.0, -2.0/(far - near), -(far+near)/(far - near),
+            0.0, 0.0, 0.0, 1.0
+        ])
+    }
+
     pub fn translation(x: f32, y: f32, z: f32) -> Mat4 {
         Mat4::new([
             1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, x, y, z, 1.0,
@@ -54,8 +63,11 @@ impl Mat4 {
 
     pub fn rotate(x: f32, y: f32, z: f32) -> Mat4 {
 
-        // TODO optimize by using assignments instead of matrix multiplications
-
+        // TODO use quaternions to represent rotations
+        // https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation#Using_quaternion_as_rotations
+        // https://en.wikipedia.org/wiki/Quaternion#Hamilton_product
+        // https://www.cs.cmu.edu/~kiranb/animation/p245-shoemake.pdf
+        
         let mut rot_x = Mat4::identity();
         let mut rot_y = Mat4::identity();
         let mut rot_z = Mat4::identity();

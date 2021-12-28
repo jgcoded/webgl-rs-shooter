@@ -41,6 +41,8 @@ pub fn load_texture(
         Some(&src_data)
     )?;
 
+    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
+
     let image = HtmlImageElement::new()?;
     let image_rc = Rc::new(image);
     let texture_rc = Rc::new(texture);
@@ -71,6 +73,7 @@ pub fn load_texture(
             };
 
             gl.generate_mipmap(WebGl2RenderingContext::TEXTURE_2D);
+            gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
 
         }) as Box<dyn FnMut()>);
 
