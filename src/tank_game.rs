@@ -3,12 +3,13 @@ use std::cell::RefCell;
 use std::convert::TryInto;
 use std::rc::Rc;
 
-use crate::texture::load_texture;
+use crate::texture::{load_image_as_texture, create_rgba_texture_from_array_buffer_view};
 
 use super::buffer::{create_square_buffer, create_texture_buffer};
 use super::matrix::Mat4;
 use super::shader::{compile_shader, link_program};
 use super::utils::{set_panic_hook, get_rendering_context, get_canvas, request_animation_frame};
+use js_sys::Math;
 use wasm_bindgen::{prelude::*};
 use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocation, WebGlBuffer, HtmlCanvasElement, WebGlTexture, WebGlVertexArrayObject};
 
@@ -24,7 +25,9 @@ struct TankGameFlyweight {
     texture_buffer: WebGlBuffer,
     projection: Mat4,
     model_view: Mat4,
-    vertex_array_object: WebGlVertexArrayObject
+    vertex_array_object: WebGlVertexArrayObject,
+    foreground_texture_buffer: js_sys::Uint8Array,
+    foreground_texture: WebGlTexture,
 }
 
 #[wasm_bindgen]
@@ -64,7 +67,7 @@ fn initialize(canvas: &HtmlCanvasElement, gl: &WebGl2RenderingContext) -> Result
     set_panic_hook();
     console::log_1(&"Initializing tank game".into());
 
-    let background_texture = load_texture(&gl, "assets/tankgame/background.jpg")?;
+    let background_texture = load_image_as_texture(&gl, "assets/tankgame/background.jpg")?;
 
     let vertex_shader_source = r##"
 attribute vec4 aVertexPosition;
@@ -82,12 +85,17 @@ void main(void) {
     "##;
 
     let fragment_shader_source = r##"
+precision mediump float;
+
 varying highp vec2 vTextureCoord;
 
 uniform sampler2D uSampler;
 
 void main(void) {
-    gl_FragColor = texture2D(uSampler, vTextureCoord);
+    vec4 color = texture2D(uSampler, vTextureCoord);
+    if (color.a < 0.1)
+        discard;
+    gl_FragColor = color;
 }
     "##;
 
@@ -183,6 +191,22 @@ void main(void) {
 
     let model_view = Mat4::translation(0.0, 0.0, -6.0);
 
+    let buffer_size = (canvas.client_width()*canvas.client_height()*4) as u32;
+    let mut foreground_texture_buffer = js_sys::Uint8Array::new_with_length(buffer_size);
+
+    generate_foreground_texture_buffer(
+        &mut foreground_texture_buffer,
+        canvas.client_width(),
+        canvas.client_height()
+    );
+
+    let foreground_texture = create_rgba_texture_from_array_buffer_view(
+        gl,
+        canvas.client_width(),
+        canvas.client_height(),
+        &mut foreground_texture_buffer
+    )?;
+
     Ok(TankGameFlyweight {
         background_texture: background_texture,
         model_view: model_view,
@@ -195,8 +219,37 @@ void main(void) {
         texture_sampler_uniform: texture_sampler_uniform,
         vertex_position_attrib: vertex_position_attrib,
         vertex_texture_attrib: vertex_texture_attrib,
-        vertex_array_object: vertex_array_object
+        vertex_array_object: vertex_array_object,
+        foreground_texture: foreground_texture,
+        foreground_texture_buffer: foreground_texture_buffer
     })
+}
+
+fn contour_function(x: f32) -> f32 {
+    0.1*(5.0*x).sin() + 0.8
+}
+
+fn generate_foreground_texture_buffer(
+    buffer: &mut js_sys::Uint8Array,
+    width: i32,
+    height: i32
+) {
+    for i in 1..width {
+        let val = (contour_function((i as f32) / (width as f32)) * height as f32) as i32;
+        for j in 1..height {
+            let index = 4*(j*width + i) as u32;
+            
+            let color = match j >= val {
+                true => 255u8,
+                false => 0u8
+            };
+
+            buffer.set_index(index, color);
+            buffer.set_index(index + 1, color);
+            buffer.set_index(index + 2, color);
+            buffer.set_index(index + 3, color);
+        }
+    }
 }
 
 fn update(game: &mut TankGameFlyweight, timestamp: f64) {
@@ -217,6 +270,8 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
 
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear_depth(1.0);
+    gl.enable(WebGl2RenderingContext::BLEND);
+    gl.blend_func(WebGl2RenderingContext::SRC_COLOR, WebGl2RenderingContext::DST_COLOR);
     gl.enable(WebGl2RenderingContext::DEPTH_TEST);
     gl.depth_func(WebGl2RenderingContext::LEQUAL);
     gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT);
@@ -241,6 +296,18 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
     // Tell the shader we bound the texture to texture unit 0
     gl.uniform1i(Some(&game.texture_sampler_uniform), 0);
 
+    {
+        let offset = 0;
+        let vertex_count = 4;
+        gl.draw_arrays(
+            WebGl2RenderingContext::TRIANGLE_STRIP,
+            offset,
+            vertex_count
+        );
+    }
+
+    gl.active_texture(WebGl2RenderingContext::TEXTURE0);
+    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&game.foreground_texture));
     {
         let offset = 0;
         let vertex_count = 4;
