@@ -13,6 +13,15 @@ use js_sys::Math;
 use wasm_bindgen::{prelude::*};
 use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocation, WebGlBuffer, HtmlCanvasElement, WebGlTexture, WebGlVertexArrayObject};
 
+struct Player {
+    terrain_position: u32
+}
+
+struct GameState {
+    terrain_contour: js_sys::Float32Array,
+    players: [Player; 4]
+}
+
 struct TankGameFlyweight {
     background_texture: Rc<WebGlTexture>,
     program: WebGlProgram,
@@ -28,6 +37,7 @@ struct TankGameFlyweight {
     vertex_array_object: WebGlVertexArrayObject,
     foreground_texture_buffer: js_sys::Uint8Array,
     foreground_texture: WebGlTexture,
+    game_state: GameState
 }
 
 #[wasm_bindgen]
@@ -191,13 +201,44 @@ void main(void) {
 
     let model_view = Mat4::translation(0.0, 0.0, -6.0);
 
+    let mut contour = js_sys::Float32Array::new_with_length(canvas.client_width() as u32);
+    generate_terrain_contour(&mut contour, canvas.client_height() as f32);
+
+    let game_state = GameState {
+        terrain_contour: contour,
+        players: [
+        Player {
+            terrain_position: (0.15f32 * canvas.client_width() as f32) as u32
+        },
+        Player {
+            terrain_position: (0.3f32 * canvas.client_width() as f32) as u32
+        },
+        Player {
+            terrain_position: (0.5f32 * canvas.client_width() as f32) as u32
+        },
+        Player {
+            terrain_position: (0.75f32 * canvas.client_width() as f32) as u32
+        }
+        ]
+    };
+
+    for player in &game_state.players {
+        let start = (player.terrain_position - 20).max(0);
+        let end = (player.terrain_position + 20).min(canvas.client_width() as u32);
+        let height = game_state.terrain_contour.get_index(start);
+        for i in start..end {
+            game_state.terrain_contour.set_index(i, height);
+        }
+    }
+
     let buffer_size = (canvas.client_width()*canvas.client_height()*4) as u32;
     let mut foreground_texture_buffer = js_sys::Uint8Array::new_with_length(buffer_size);
 
     generate_foreground_texture_buffer(
         &mut foreground_texture_buffer,
-        canvas.client_width(),
-        canvas.client_height()
+        &game_state.terrain_contour,
+        canvas.client_width() as u32,
+        canvas.client_height() as u32
     );
 
     let foreground_texture = create_rgba_texture_from_array_buffer_view(
@@ -221,7 +262,8 @@ void main(void) {
         vertex_texture_attrib: vertex_texture_attrib,
         vertex_array_object: vertex_array_object,
         foreground_texture: foreground_texture,
-        foreground_texture_buffer: foreground_texture_buffer
+        foreground_texture_buffer: foreground_texture_buffer,
+        game_state: game_state
     })
 }
 
@@ -229,17 +271,28 @@ fn contour_function(x: f32) -> f32 {
     0.1*(5.0*x).sin() + 0.8
 }
 
+fn generate_terrain_contour(
+    contour: &mut js_sys::Float32Array,
+    max_height: f32
+) {
+    for i in 0..contour.length() {
+        let height = contour_function((i as f32) / (contour.length() as f32)) * max_height as f32;
+        contour.set_index(i, height)
+    }
+}
+
 fn generate_foreground_texture_buffer(
     buffer: &mut js_sys::Uint8Array,
-    width: i32,
-    height: i32
+    contour: &js_sys::Float32Array,
+    width: u32,
+    height: u32
 ) {
-    for i in 1..width {
-        let val = (contour_function((i as f32) / (width as f32)) * height as f32) as i32;
-        for j in 1..height {
+    for i in 0..width {
+        let contour_height = contour.get_index(i);
+        for j in 0..height {
             let index = 4*(j*width + i) as u32;
             
-            let color = match j >= val {
+            let color = match j >= contour_height as u32 {
                 true => 255u8,
                 false => 0u8
             };
