@@ -365,44 +365,37 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
 
     gl.bind_vertex_array(Some(&game.vertex_array_object));
 
-    gl.active_texture(WebGl2RenderingContext::TEXTURE0);
-    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&game.background_texture));
-    // Tell the shader we bound the texture to texture unit 0
-    gl.uniform1i(Some(&game.texture_sampler_uniform), 0);
+    render_texture_with_mask(gl, &game.background_texture, &game.texture_sampler_uniform, &game.one_mask, &game.mask_sampler_uniform);
 
-    gl.active_texture(WebGl2RenderingContext::TEXTURE1);
-    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&game.one_mask));
-    gl.uniform1i(Some(&game.mask_sampler_uniform), 1);
-
-    {
-        let offset = 0;
-        let vertex_count = 4;
-        gl.draw_arrays(
-            WebGl2RenderingContext::TRIANGLE_STRIP,
-            offset,
-            vertex_count
-        );
-    }
-
-    gl.active_texture(WebGl2RenderingContext::TEXTURE0);
-    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&game.foreground_texture));
-    gl.uniform1i(Some(&game.texture_sampler_uniform), 0);
-
-    gl.active_texture(WebGl2RenderingContext::TEXTURE1);
-    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&game.foreground_mask_texture));
-    gl.uniform1i(Some(&game.mask_sampler_uniform), 1);
-
-    {
-        let offset = 0;
-        let vertex_count = 4;
-        gl.draw_arrays(
-            WebGl2RenderingContext::TRIANGLE_STRIP,
-            offset,
-            vertex_count
-        );
-    }
+    render_texture_with_mask(gl, &game.foreground_texture, &game.texture_sampler_uniform, &game.foreground_mask_texture, &game.mask_sampler_uniform);
 
     gl.bind_vertex_array(None);
+}
+
+fn render_texture_with_mask(
+    gl: &WebGl2RenderingContext,
+    texture: &WebGlTexture,
+    texture_sampler_uniform: &WebGlUniformLocation,
+    mask: &WebGlTexture,
+    mask_sampler_uniform: &WebGlUniformLocation
+) {
+    gl.active_texture(WebGl2RenderingContext::TEXTURE0);
+    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(texture));
+    gl.uniform1i(Some(texture_sampler_uniform), 0);
+
+    gl.active_texture(WebGl2RenderingContext::TEXTURE1);
+    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(mask));
+    gl.uniform1i(Some(mask_sampler_uniform), 1);
+
+    {
+        let offset = 0;
+        let vertex_count = 4;
+        gl.draw_arrays(
+            WebGl2RenderingContext::TRIANGLE_STRIP,
+            offset,
+            vertex_count
+        );
+    }
 }
 
 fn clean(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
