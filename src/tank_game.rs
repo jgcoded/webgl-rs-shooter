@@ -4,6 +4,7 @@ use std::convert::TryInto;
 use std::rc::Rc;
 
 use crate::texture::{load_image_as_texture, create_rgba_texture_from_array_buffer_view, create_rgba_texture_from_u8_array};
+use crate::vector::Vec3;
 
 use super::buffer::{create_square_buffer, create_texture_buffer};
 use super::matrix::Mat4;
@@ -14,7 +15,8 @@ use wasm_bindgen::{prelude::*};
 use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocation, WebGlBuffer, HtmlCanvasElement, WebGlTexture, WebGlVertexArrayObject};
 
 struct Player {
-    terrain_position: u32
+    terrain_position: u32,
+    model_matrix: Mat4
 }
 
 struct GameState {
@@ -28,19 +30,22 @@ struct TankGameFlyweight {
     vertex_position_attrib: i32,
     vertex_texture_attrib: i32,
     projection_matrix_uniform: WebGlUniformLocation,
-    model_view_matrix_uniform: WebGlUniformLocation,
+    model_matrix_uniform: WebGlUniformLocation,
+    //view_matrix_uniform: WebGlUniformLocation,
     texture_sampler_uniform: WebGlUniformLocation,
     mask_sampler_uniform: WebGlUniformLocation,
     square_buffer: WebGlBuffer,
     texture_buffer: WebGlBuffer,
     projection: Mat4,
-    model_view: Mat4,
+    background_model_matrix: Mat4,
     vertex_array_object: WebGlVertexArrayObject,
     foreground_mask_buffer: js_sys::Uint8Array,
     foreground_mask_texture: WebGlTexture,
     foreground_texture: Rc<WebGlTexture>,
     one_mask: WebGlTexture,
-    game_state: GameState
+    carriage_texture: Rc<WebGlTexture>,
+    game_state: GameState,
+    //view_matrix: Mat4
 }
 
 #[wasm_bindgen]
@@ -82,18 +87,18 @@ fn initialize(canvas: &HtmlCanvasElement, gl: &WebGl2RenderingContext) -> Result
 
     let background_texture = load_image_as_texture(&gl, "assets/tankgame/background.jpg")?;
     let foreground_texture = load_image_as_texture(&gl, "assets/tankgame/ground.jpg")?;
-
+    let carriage_texture = load_image_as_texture(&gl, "assets/tankgame/carriage.png")?;
     let vertex_shader_source = r##"
 attribute vec4 aVertexPosition;
 attribute vec2 aTextureCoord;
 
-uniform mat4 uModelViewMatrix;
+uniform mat4 uModelMatrix;
 uniform mat4 uProjectionMatrix;
 
 varying highp vec2 vTextureCoord;
 
 void main(void) {
-  gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+  gl_Position = uProjectionMatrix * uModelMatrix * aVertexPosition;
   vTextureCoord = aTextureCoord;
 }
     "##;
@@ -110,12 +115,7 @@ void main(void) {
     vec4 color = texture2D(uTextureSampler, vTextureCoord);
     vec4 mask = texture2D(uMaskSampler, vTextureCoord);
 
-    color = color * mask;
-
-    if (color.a < 0.1)
-        discard;
-
-    gl_FragColor = color;
+    gl_FragColor = mask * color;
 }
     "##;
 
@@ -137,11 +137,17 @@ void main(void) {
         "uProjectionMatrix")
         .ok_or_else(|| String::from("Could not get project uniform location"))?;
     
-    let model_view_matrix_uniform = gl.get_uniform_location(
+    let model_matrix_uniform = gl.get_uniform_location(
         &program, 
-        "uModelViewMatrix")
-        .ok_or_else(|| String::from("Could not get model view uniform location"))?;
+        "uModelMatrix")
+        .ok_or_else(|| String::from("Could not get model uniform location"))?;
 
+        /*
+    let view_matrix_uniform = gl.get_uniform_location(
+        &program, 
+        "uViewMatrix")
+        .ok_or_else(|| String::from("Could not get view uniform location"))?;
+*/
     let texture_sampler_uniform = gl.get_uniform_location(
         &program,
     "uTextureSampler")
@@ -205,7 +211,7 @@ void main(void) {
     //let projection = Mat4::perspective(field_of_view, aspect, near, far);
     */
     //let projection = Mat4::orthographic(-1.0, 1.0, -1.0, 1.0, near, far);
-
+    /*
     let projection = Mat4::orthographic(
         -canvas.client_width() as f32, 
         canvas.client_width() as f32, 
@@ -213,26 +219,49 @@ void main(void) {
         canvas.client_height() as f32,
         0.1,
         100.0);
+    */
+    let projection = Mat4::orthographic(
+        0.0, 
+        canvas.client_width() as f32, 
+        canvas.client_height() as f32,
+        0.0,
+        -1.0,
+        1.0);
+    // https://learnopengl.com/In-Practice/2D-Game/Rendering-Sprites
+    /*
+    let view_matrix = Mat4::look_at(
+        Vec3::new(0.0, 0.0, -1.0),
+        Vec3::new(0.0, 0.0, 0.0), 
+            Vec3::new(0.0, 1.0, 0.0)
+    );
+    */
 
-    let model_view = Mat4::translation(0.0, 0.0, -6.0);
-
+    let translate = Mat4::translation(0.0, 0.0, 0.0);
+    let scale = Mat4::scale(canvas.client_width() as f32, canvas.client_height() as f32, 0.0);// Mat4::scale(1024.0/768.0, 1.0, 1.0);
+    //let rotation = Mat4::rotate(0.0, 0.0, 0.0);
+    let background_model_matrix = scale*translate;
+    
     let mut contour = js_sys::Float32Array::new_with_length(canvas.client_width() as u32);
     generate_terrain_contour(&mut contour, canvas.client_height() as f32);
 
-    let game_state = GameState {
+    let mut game_state = GameState {
         terrain_contour: contour,
         players: [
         Player {
-            terrain_position: (0.15f32 * canvas.client_width() as f32) as u32
+            terrain_position: (0.15f32 * canvas.client_width() as f32) as u32,
+            model_matrix: Mat4::identity()
         },
         Player {
-            terrain_position: (0.3f32 * canvas.client_width() as f32) as u32
+            terrain_position: (0.3f32 * canvas.client_width() as f32) as u32,
+            model_matrix: Mat4::identity()
         },
         Player {
-            terrain_position: (0.5f32 * canvas.client_width() as f32) as u32
+            terrain_position: (0.5f32 * canvas.client_width() as f32) as u32,
+            model_matrix: Mat4::identity()
         },
         Player {
-            terrain_position: (0.75f32 * canvas.client_width() as f32) as u32
+            terrain_position: (0.75f32 * canvas.client_width() as f32) as u32,
+            model_matrix: Mat4::identity()
         }
         ]
     };
@@ -245,6 +274,16 @@ void main(void) {
             game_state.terrain_contour.set_index(i, height);
         }
     }
+
+    for player in &mut game_state.players {
+        let x = player.terrain_position;
+        let y = game_state.terrain_contour.get_index(x);
+    
+        let translation = Mat4::translation(x as f32 - 25.0, y - 19.5, 0.0);
+        let scale = Mat4::scale(50.0, 19.5, 1.0);
+        player.model_matrix = scale * translation;
+    }
+
 
     let buffer_size = (canvas.client_width()*canvas.client_height()*4) as u32;
     let mut foreground_mask_buffer = js_sys::Uint8Array::new_with_length(buffer_size);
@@ -270,8 +309,9 @@ void main(void) {
 
     Ok(TankGameFlyweight {
         background_texture: background_texture,
-        model_view: model_view,
-        model_view_matrix_uniform: model_view_matrix_uniform,
+        background_model_matrix: background_model_matrix,
+        model_matrix_uniform: model_matrix_uniform,
+        //view_matrix_uniform: view_matrix_uniform,
         program: program,
         projection: projection,
         projection_matrix_uniform: projection_matrix_uniform,
@@ -286,7 +326,9 @@ void main(void) {
         foreground_mask_buffer: foreground_mask_buffer,
         one_mask: one_mask,
         game_state: game_state,
-        foreground_texture: foreground_texture
+        foreground_texture: foreground_texture,
+        carriage_texture: carriage_texture,
+        //view_matrix: view_matrix
     })
 }
 
@@ -329,15 +371,7 @@ fn generate_foreground_mask_buffer(
 }
 
 fn update(game: &mut TankGameFlyweight, timestamp: f64) {
-    let x = 0.0;// 0.8*(timestamp / 1000.0).cos();
-    let y = 0.0; //0.8*(timestamp / 1000.0).sin();
-    let translate = Mat4::translation(x as f32, y as f32, 0.0);
 
-    let scale = Mat4::scale(640.0, 480.0, 1.0);// Mat4::scale(1024.0/768.0, 1.0, 1.0);
-
-    let rotation = Mat4::rotate(0.0, 0.0, 0.0);
-
-    game.model_view = rotation * scale * translate;
 }
 
 fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
@@ -346,9 +380,11 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
 
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear_depth(1.0);
-    gl.enable(WebGl2RenderingContext::DEPTH_TEST);
-    gl.depth_func(WebGl2RenderingContext::LEQUAL);
-    gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT);
+    gl.enable(WebGl2RenderingContext::BLEND);
+    gl.blend_func(WebGl2RenderingContext::SRC_ALPHA, WebGl2RenderingContext::ONE_MINUS_SRC_ALPHA);
+    //gl.enable(WebGl2RenderingContext::DEPTH_TEST);
+    //gl.depth_func(WebGl2RenderingContext::LEQUAL);
+    gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT /* | WebGl2RenderingContext::DEPTH_BUFFER_BIT */);
 
     gl.use_program(Some(&game.program));
 
@@ -358,9 +394,9 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
         game.projection.data()
     );
     gl.uniform_matrix4fv_with_f32_array(
-        Some(&game.model_view_matrix_uniform),
+        Some(&game.model_matrix_uniform),
         false,
-        game.model_view.data()
+        game.background_model_matrix.data()
     );
 
     gl.bind_vertex_array(Some(&game.vertex_array_object));
@@ -369,9 +405,20 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
 
     render_texture_with_mask(gl, &game.foreground_texture, &game.texture_sampler_uniform, &game.foreground_mask_texture, &game.mask_sampler_uniform);
 
+    for player in &game.game_state.players {
+        gl.uniform_matrix4fv_with_f32_array(
+            Some(&game.model_matrix_uniform),
+            false,
+            player.model_matrix.data()
+        );
+        render_texture_with_mask(gl, &game.carriage_texture, &game.texture_sampler_uniform, &game.one_mask, &game.mask_sampler_uniform);
+    }
+
     gl.bind_vertex_array(None);
+
 }
 
+// Assumes a shader program with texture sampler 0 and mask sampler 1
 fn render_texture_with_mask(
     gl: &WebGl2RenderingContext,
     texture: &WebGlTexture,
@@ -389,9 +436,9 @@ fn render_texture_with_mask(
 
     {
         let offset = 0;
-        let vertex_count = 4;
+        let vertex_count = 6;
         gl.draw_arrays(
-            WebGl2RenderingContext::TRIANGLE_STRIP,
+            WebGl2RenderingContext::TRIANGLES,
             offset,
             vertex_count
         );

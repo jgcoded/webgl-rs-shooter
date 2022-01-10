@@ -22,13 +22,15 @@ pub fn create_square_buffer(
 ) -> Result<WebGlBuffer, JsValue> {
 
     let positions = [
-        -1.0,  1.0,
-        -1.0, -1.0,
-         1.0,  1.0,
-         1.0, -1.0,
+        0.0, 1.0,
+        1.0, 0.0,
+        0.0, 0.0,
+        0.0, 1.0,
+        1.0, 1.0,
+        1.0, 0.0
     ];
 
-    let data = js_sys::Float32Array::new_with_length(8);
+    let data = js_sys::Float32Array::new_with_length(positions.len() as u32);
     data.copy_from(&positions);
 
     create_buffer(gl, data)
@@ -44,7 +46,7 @@ pub fn create_color_buffer(
         0.0f32,  0.0f32,  1.0f32,  1.0f32,    // blue
     ];
 
-    let data = js_sys::Float32Array::new_with_length(16);
+    let data = js_sys::Float32Array::new_with_length(colors.len() as u32);
     data.copy_from(&colors);
 
     create_buffer(gl, data)
@@ -54,13 +56,15 @@ pub fn create_texture_buffer(
     gl: &WebGl2RenderingContext
 ) -> Result<WebGlBuffer, JsValue> {
     let texture_coordinates = [
-        0.0,  0.0,
-        0.0,  1.0,
-        1.0,  0.0,
-        1.0,  1.0,
+        0.0, 1.0,
+        1.0, 0.0,
+        0.0, 0.0,
+        0.0, 1.0,
+        1.0, 1.0,
+        1.0, 0.0
     ];
 
-    let data = js_sys::Float32Array::new_with_length(8);
+    let data = js_sys::Float32Array::new_with_length(texture_coordinates.len() as u32);
     data.copy_from(&texture_coordinates);
 
     create_buffer(gl, data)

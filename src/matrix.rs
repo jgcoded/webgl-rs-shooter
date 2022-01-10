@@ -1,5 +1,8 @@
-use std::ops::Mul;
+use std::ops::{Mul, Add};
 
+use crate::vector::Vec3;
+
+#[derive(Copy, Clone)]
 pub struct Mat4 {
     data: [f32; 16],
 }
@@ -40,12 +43,28 @@ impl Mat4 {
         ])
     }
 
+    /*
+    pub fn look_at(camera_pos: Vec3, target_pos: Vec3, up: Vec3) -> Mat4 {
+
+        let camera_direction = (camera_pos - target_pos).normalized();
+        let camera_right = camera_direction.cross(&up).normalized();
+        let camera_up = camera_direction.cross(&camera_right);
+
+        // https://learnopengl.com/Getting-started/Camera
+        // https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_transform.inl
+
+        // how come glm uses the dot product??
+
+        Mat4::identity()
+    }
+    */
+
     pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
         Mat4::new([
-            2.0 / (right - left), 0.0, 0.0, -(right + left)/(right-left),
-            0.0, 2.0/(top-bottom), 0.0, -(top+bottom)/(top-bottom),
-            0.0, 0.0, -2.0/(far - near), -(far+near)/(far - near),
-            0.0, 0.0, 0.0, 1.0
+            2.0 / (right - left), 0.0, 0.0, 0.0,
+            0.0, 2.0/(top-bottom), 0.0, 0.0,
+            0.0, 0.0, -2.0/(far - near), 0.0,
+            -(right + left)/(right-left), -(top+bottom)/(top-bottom), -(far+near)/(far - near), 1.0
         ])
     }
 
@@ -98,6 +117,33 @@ impl Mat4 {
 
     pub fn data(&self) -> &[f32; 16] {
         &self.data
+    }
+}
+
+impl Add for Mat4 {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            data: [
+                self.data[0] + other.data[0],
+                self.data[1] + other.data[1],
+                self.data[2] + other.data[2],
+                self.data[3] + other.data[3],
+                self.data[4] + other.data[4],
+                self.data[5] + other.data[5],
+                self.data[6] + other.data[6],
+                self.data[7] + other.data[7],
+                self.data[8] + other.data[8],
+                self.data[9] + other.data[9],
+                self.data[10] + other.data[10],
+                self.data[11] + other.data[11],
+                self.data[12] + other.data[12],
+                self.data[13] + other.data[13],
+                self.data[14] + other.data[14],
+                self.data[15] + other.data[15]
+            ]
+        }
     }
 }
 
@@ -344,5 +390,34 @@ mod tests {
         threshold_assert(0.0f32, data[13]);
         threshold_assert(0.0f32, data[14]);
         threshold_assert(1.0f32, data[15]);
+    }
+
+    fn addition_test() {
+        let left = Mat4::new([
+            1.0,
+            2.0,
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+            7.0,
+            8.0,
+            9.0,
+            10.0,
+            11.0,
+            12.0,
+            13.0,
+            14.0,
+            15.0,
+            16.0
+        ]);
+
+        let right = left.clone();
+
+        let result = left + right;
+
+        for i in 0..result.data.len() {
+            assert_eq!(2.0*(i+1) as f32, result.data[i]);
+        }
     }
 }
