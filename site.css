@@ -70,10 +70,6 @@ h2 {
   padding: 1rem;
 }
 
-#game {
- display: none; 
-}
-
 canvas {
   width: 640px;
   height: 480px;
