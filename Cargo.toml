@@ -1,5 +1,5 @@
 [package]
-name = "me"
+name = "webgl-rs-shooter"
 version = "0.1.0"
 authors = ["Julio Gutierrez"]
 edition = "2018"
