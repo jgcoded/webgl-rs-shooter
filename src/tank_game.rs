@@ -16,7 +16,8 @@ use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocatio
 
 struct Player {
     terrain_position: u32,
-    model_matrix: Mat4
+    model_matrix: Mat4,
+    color_mask: WebGlTexture
 }
 
 struct GameState {
@@ -244,24 +245,48 @@ void main(void) {
     let mut contour = js_sys::Float32Array::new_with_length(canvas.client_width() as u32);
     generate_terrain_contour(&mut contour, canvas.client_height() as f32);
 
+    let mask_array = [255, 0, 0, 255];
+    let red_mask = create_rgba_texture_from_u8_array(
+        &gl, 1, 1, &mask_array
+    )?;
+
+    let mask_array = [0, 255, 0, 255];
+    let green_mask = create_rgba_texture_from_u8_array(
+        &gl, 1, 1, &mask_array
+    )?;
+
+    let mask_array = [0, 0, 255, 255];
+    let blue_mask = create_rgba_texture_from_u8_array(
+        &gl, 1, 1, &mask_array
+    )?;
+
+    let mask_array = [255, 0, 255, 255];
+    let purple_mask = create_rgba_texture_from_u8_array(
+        &gl, 1, 1, &mask_array
+    )?;
+
     let mut game_state = GameState {
         terrain_contour: contour,
         players: [
         Player {
             terrain_position: (0.15f32 * canvas.client_width() as f32) as u32,
-            model_matrix: Mat4::identity()
+            model_matrix: Mat4::identity(),
+            color_mask: red_mask
         },
         Player {
             terrain_position: (0.3f32 * canvas.client_width() as f32) as u32,
-            model_matrix: Mat4::identity()
+            model_matrix: Mat4::identity(),
+            color_mask: green_mask
         },
         Player {
             terrain_position: (0.5f32 * canvas.client_width() as f32) as u32,
-            model_matrix: Mat4::identity()
+            model_matrix: Mat4::identity(),
+            color_mask: blue_mask
         },
         Player {
             terrain_position: (0.75f32 * canvas.client_width() as f32) as u32,
-            model_matrix: Mat4::identity()
+            model_matrix: Mat4::identity(),
+            color_mask: purple_mask
         }
         ]
     };
@@ -411,7 +436,7 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
             false,
             player.model_matrix.data()
         );
-        render_texture_with_mask(gl, &game.carriage_texture, &game.texture_sampler_uniform, &game.one_mask, &game.mask_sampler_uniform);
+        render_texture_with_mask(gl, &game.carriage_texture, &game.texture_sampler_uniform, &player.color_mask, &game.mask_sampler_uniform);
     }
 
     gl.bind_vertex_array(None);
