@@ -17,7 +17,9 @@ use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocatio
 struct Player {
     terrain_position: u32,
     model_matrix: Mat4,
-    color_mask: WebGlTexture
+    cannon_matrix: Mat4,
+    color_mask: WebGlTexture,
+    cannon_angle: f32
 }
 
 struct GameState {
@@ -45,6 +47,7 @@ struct TankGameFlyweight {
     foreground_texture: Rc<WebGlTexture>,
     one_mask: WebGlTexture,
     carriage_texture: Rc<WebGlTexture>,
+    cannon_texture: Rc<WebGlTexture>,
     game_state: GameState,
     //view_matrix: Mat4
 }
@@ -89,6 +92,7 @@ fn initialize(canvas: &HtmlCanvasElement, gl: &WebGl2RenderingContext) -> Result
     let background_texture = load_image_as_texture(&gl, "assets/tankgame/background.jpg")?;
     let foreground_texture = load_image_as_texture(&gl, "assets/tankgame/ground.jpg")?;
     let carriage_texture = load_image_as_texture(&gl, "assets/tankgame/carriage.png")?;
+    let cannon_texture = load_image_as_texture(&gl, "assets/tankgame/cannon.png")?;
     let vertex_shader_source = r##"
 attribute vec4 aVertexPosition;
 attribute vec2 aTextureCoord;
@@ -271,43 +275,44 @@ void main(void) {
         Player {
             terrain_position: (0.15f32 * canvas.client_width() as f32) as u32,
             model_matrix: Mat4::identity(),
-            color_mask: red_mask
+            color_mask: red_mask,
+            cannon_matrix: Mat4::identity(),
+            cannon_angle: 45.0
         },
         Player {
             terrain_position: (0.3f32 * canvas.client_width() as f32) as u32,
             model_matrix: Mat4::identity(),
-            color_mask: green_mask
+            color_mask: green_mask,
+            cannon_matrix: Mat4::identity(),
+            cannon_angle: 45.0
         },
         Player {
             terrain_position: (0.5f32 * canvas.client_width() as f32) as u32,
             model_matrix: Mat4::identity(),
-            color_mask: blue_mask
+            color_mask: blue_mask,
+            cannon_matrix: Mat4::identity(),
+            cannon_angle: 45.0
         },
         Player {
             terrain_position: (0.75f32 * canvas.client_width() as f32) as u32,
             model_matrix: Mat4::identity(),
-            color_mask: purple_mask
+            color_mask: purple_mask,
+            cannon_matrix: Mat4::identity(),
+            cannon_angle: 45.0
         }
         ]
     };
 
     for player in &game_state.players {
-        let start = (player.terrain_position - 20).max(0);
-        let end = (player.terrain_position + 20).min(canvas.client_width() as u32);
+        let start = (player.terrain_position - 50).max(0);
+        let end = (player.terrain_position + 50).min(canvas.client_width() as u32);
         let height = game_state.terrain_contour.get_index(start);
         for i in start..end {
             game_state.terrain_contour.set_index(i, height);
         }
     }
 
-    for player in &mut game_state.players {
-        let x = player.terrain_position;
-        let y = game_state.terrain_contour.get_index(x);
-    
-        let translation = Mat4::translation(x as f32 - 25.0, y - 19.5, 0.0);
-        let scale = Mat4::scale(50.0, 19.5, 1.0);
-        player.model_matrix = scale * translation;
-    }
+    update_players(&mut game_state);
 
 
     let buffer_size = (canvas.client_width()*canvas.client_height()*4) as u32;
@@ -354,7 +359,49 @@ void main(void) {
         foreground_texture: foreground_texture,
         carriage_texture: carriage_texture,
         //view_matrix: view_matrix
+        cannon_texture: cannon_texture
     })
+}
+
+fn update_players(game_state: &mut GameState) {
+    for player in &mut game_state.players {
+        let x = player.terrain_position;
+        let y = game_state.terrain_contour.get_index(x);
+
+        // Scale to image size
+        let model = Mat4::scale(100.0, 39.0, 1.0);
+
+        // Move origin to image center
+        let model = model * Mat4::translation(-50.0, -19.5, 0.0);
+
+        // Local transform to have the bottom of the carriage touch the ground
+        let model = model * Mat4::translation(0.0, -19.5, 0.0);
+
+        // Translate to world position
+        let model = model * Mat4::translation(x as f32, y, 0.0);
+
+        player.model_matrix = model;
+
+        // Scale to the image size
+        let model = Mat4::scale(20.0, 70.0, 1.0);
+
+        // Move origin to bottom center of cannon
+        let model = model * Mat4::translation(-10.0, -55.0, 0.0);
+
+        // Apply rotation
+        let model = model * Mat4::rotate(0.0, 0.0, player.cannon_angle);
+
+        // Move origin back
+        let model = model * Mat4::translation(10.0, 55.0, 0.0);
+
+        // local transform to move cannon to the carriage wheel center
+        let model = model * Mat4::translation(-10.0, -75.0, 0.0);
+
+        // Translate to world position
+        let model = model * Mat4::translation(x as f32, y, 0.0);
+
+        player.cannon_matrix = model;
+    }
 }
 
 fn contour_function(x: f32) -> f32 {
@@ -396,7 +443,8 @@ fn generate_foreground_mask_buffer(
 }
 
 fn update(game: &mut TankGameFlyweight, timestamp: f64) {
-
+    game.game_state.players[0].cannon_angle = timestamp as f32 / 10.0;
+    update_players(&mut game.game_state);
 }
 
 fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
@@ -431,6 +479,14 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
     render_texture_with_mask(gl, &game.foreground_texture, &game.texture_sampler_uniform, &game.foreground_mask_texture, &game.mask_sampler_uniform);
 
     for player in &game.game_state.players {
+
+        gl.uniform_matrix4fv_with_f32_array(
+            Some(&game.model_matrix_uniform),
+            false,
+            player.cannon_matrix.data()
+        );
+        render_texture_with_mask(gl, &game.cannon_texture, &game.texture_sampler_uniform, &player.color_mask, &game.mask_sampler_uniform);
+
         gl.uniform_matrix4fv_with_f32_array(
             Some(&game.model_matrix_uniform),
             false,

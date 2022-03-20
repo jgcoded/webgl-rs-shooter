@@ -17,8 +17,7 @@ $ npm install
 ## Build
 
 ```
-$ wasm-pack build
-$ npm run serve
+$ wasm-pack build && npm run serve
 ```
 
 Then visit http://localhost:8080/ on your browser.
