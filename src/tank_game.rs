@@ -4,6 +4,7 @@ use std::convert::TryInto;
 use std::rc::Rc;
 
 use crate::texture::{load_image_as_texture, create_rgba_texture_from_array_buffer_view, create_rgba_texture_from_u8_array};
+use crate::utils::window;
 use crate::vector::Vec3;
 
 use super::buffer::{create_square_buffer, create_texture_buffer};
@@ -11,8 +12,8 @@ use super::matrix::Mat4;
 use super::shader::{compile_shader, link_program};
 use super::utils::{set_panic_hook, get_rendering_context, get_canvas, request_animation_frame};
 use js_sys::Math;
-use wasm_bindgen::{prelude::*};
-use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocation, WebGlBuffer, HtmlCanvasElement, WebGlTexture, WebGlVertexArrayObject};
+use wasm_bindgen::{prelude::*, JsCast};
+use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocation, WebGlBuffer, HtmlCanvasElement, WebGlTexture, WebGlVertexArrayObject, KeyboardEvent};
 
 struct Player {
     terrain_position: u32,
@@ -24,7 +25,8 @@ struct Player {
 
 struct GameState {
     terrain_contour: js_sys::Float32Array,
-    players: [Player; 4]
+    players: [Player; 4],
+    current_player: usize
 }
 
 struct TankGameFlyweight {
@@ -61,19 +63,32 @@ pub fn tank_game(canvas_id: &str) -> Result<(), JsValue> {
     let gl = get_rendering_context(&canvas)?;
 
 
+    let game = Rc::new(RefCell::new(initialize(&canvas, &gl)?));
+    let keydown_game_clone = game.clone();
+    let keydown_callback = Closure::wrap(Box::new(move |e : &KeyboardEvent| {
+        let mut game = keydown_game_clone.borrow_mut();
+        let handled = handle_keyboard_input(&mut *game, e.key().as_str());
+
+        if handled {
+            e.prevent_default();
+        }
+    }) as Box<dyn FnMut(&KeyboardEvent)>);
+
+    window().set_onkeydown(Some(keydown_callback.as_ref().unchecked_ref()));
+    // Give ownership to the browser
+    keydown_callback.forget();
+
     let f = Rc::new(RefCell::new(None));
     let g = f.clone();
-
-    let mut game = initialize(&canvas, &gl)?;
-
+    let loop_clone = game.clone();
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |t: &JsValue| {
-        
+        let mut game = loop_clone.borrow_mut();
         let timestamp = match t.as_f64() {
             Some(t) => t,
             _ => 0.0
         };
-        
-        update(&mut game, timestamp);
+
+        update(&mut *game, timestamp);
 
         render(&gl, &game);
 
@@ -270,6 +285,7 @@ void main(void) {
     )?;
 
     let mut game_state = GameState {
+        current_player: 0,
         terrain_contour: contour,
         players: [
         Player {
@@ -442,8 +458,21 @@ fn generate_foreground_mask_buffer(
     }
 }
 
+fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
+    console::log_1(&key_code.into());
+    let player = &mut game.game_state.players[game.game_state.current_player];
+
+    match key_code {
+        "ArrowLeft" => player.cannon_angle -= 2.0,
+        "ArrowRight" => player.cannon_angle += 2.0,
+        _ => return false
+    };
+
+    // Keydown was handled
+    true
+}
+
 fn update(game: &mut TankGameFlyweight, timestamp: f64) {
-    game.game_state.players[0].cannon_angle = timestamp as f32 / 10.0;
     update_players(&mut game.game_state);
 }
 
