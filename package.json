@@ -1,5 +1,5 @@
 {
-  "name": "juliog.me",
+  "name": "webgl-rs-shooter",
   "version": "0.1.0",
   "description": "create an app to consume rust-generated wasm packages",
   "scripts": {
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jgcoded/me.git"
+    "url": "git+https://github.com/jgcoded/webgl-rs-shooter.git"
   },
   "keywords": [
     "webassembly",
@@ -19,9 +19,9 @@
   "author": "Julio Gutierrez",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/jgcoded/me"
+    "url": "https://github.com/jgcoded/webgl-rs-shooter"
   },
-  "homepage": "https://juliog.me",
+  "homepage": "https://webgl-rs-shooter",
   "devDependencies": {
     "@wasm-tool/wasm-pack-plugin": "1.5.0",
     "css-loader": "^6.5.1",

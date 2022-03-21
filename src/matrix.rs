@@ -89,13 +89,12 @@ impl Mat4 {
         
         let mut rot_x = Mat4::identity();
         let mut rot_y = Mat4::identity();
-        let mut rot_z = Mat4::identity();
+        let rot_z = Mat4::rotateZ(z);
 
-        let rad_per_degree = 2.0f32*std::f32::consts::PI / 360.0f32;
+        let rad_per_degree = std::f32::consts::PI / 180.0f32;
 
         let rad_x = x*rad_per_degree;
         let rad_y = y*rad_per_degree;
-        let rad_z = z*rad_per_degree;
 
         rot_x.data[5] = rad_x.cos();
         rot_x.data[6] = rad_x.sin();
@@ -107,12 +106,23 @@ impl Mat4 {
         rot_y.data[8] = rad_y.sin();
         rot_y.data[10] = rad_y.cos();
 
+        rot_x * rot_y * rot_z
+    }
+
+    pub fn rotateZ(z: f32) -> Mat4 {
+        // https://github.com/MonoGame/MonoGame/blob/da9227e1347a7587d50cfe9b09c01d33610d4fba/MonoGame.Framework/Matrix.cs#L1148
+        let mut rot_z = Mat4::identity();
+
+        let rad_per_degree = std::f32::consts::PI / 180.0f32;
+
+        let rad_z = z*rad_per_degree;
+
         rot_z.data[0] = rad_z.cos();
         rot_z.data[1] = rad_z.sin();
         rot_z.data[4] = -rad_z.sin();
         rot_z.data[5] = rad_z.cos();
 
-        rot_x * rot_y * rot_z
+        rot_z
     }
 
     pub fn data(&self) -> &[f32; 16] {

@@ -11,7 +11,7 @@ use super::buffer::{create_square_buffer, create_texture_buffer};
 use super::matrix::Mat4;
 use super::shader::{compile_shader, link_program};
 use super::utils::{set_panic_hook, get_rendering_context, get_canvas, request_animation_frame};
-use js_sys::Math;
+use js_sys::{Math, Array};
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{WebGl2RenderingContext, console, WebGlProgram, WebGlUniformLocation, WebGlBuffer, HtmlCanvasElement, WebGlTexture, WebGlVertexArrayObject, KeyboardEvent};
 
@@ -23,10 +23,18 @@ struct Player {
     cannon_angle: f32
 }
 
+struct Rocket {
+    local_model: Mat4,
+    world_model: Mat4,
+    position: Vec3,
+    velocity: Vec3
+}
+
 struct GameState {
     terrain_contour: js_sys::Float32Array,
     players: [Player; 4],
-    current_player: usize
+    current_player: usize,
+    rocket: Option<Rocket>
 }
 
 struct TankGameFlyweight {
@@ -52,6 +60,7 @@ struct TankGameFlyweight {
     cannon_texture: Rc<WebGlTexture>,
     game_state: GameState,
     //view_matrix: Mat4
+    rocket_texture: Rc<WebGlTexture>
 }
 
 #[wasm_bindgen]
@@ -108,6 +117,8 @@ fn initialize(canvas: &HtmlCanvasElement, gl: &WebGl2RenderingContext) -> Result
     let foreground_texture = load_image_as_texture(&gl, "assets/tankgame/ground.jpg")?;
     let carriage_texture = load_image_as_texture(&gl, "assets/tankgame/carriage.png")?;
     let cannon_texture = load_image_as_texture(&gl, "assets/tankgame/cannon.png")?;
+    let rocket_texture = load_image_as_texture(&gl, "assets/tankgame/rocket.png")?;
+
     let vertex_shader_source = r##"
 attribute vec4 aVertexPosition;
 attribute vec2 aTextureCoord;
@@ -287,6 +298,7 @@ void main(void) {
     let mut game_state = GameState {
         current_player: 0,
         terrain_contour: contour,
+        rocket: None,
         players: [
         Player {
             terrain_position: (0.15f32 * canvas.client_width() as f32) as u32,
@@ -375,48 +387,20 @@ void main(void) {
         foreground_texture: foreground_texture,
         carriage_texture: carriage_texture,
         //view_matrix: view_matrix
-        cannon_texture: cannon_texture
+        cannon_texture: cannon_texture,
+        rocket_texture: rocket_texture
     })
 }
 
-fn update_players(game_state: &mut GameState) {
-    for player in &mut game_state.players {
-        let x = player.terrain_position;
-        let y = game_state.terrain_contour.get_index(x);
-
-        // Scale to image size
-        let model = Mat4::scale(100.0, 39.0, 1.0);
-
-        // Move origin to image center
-        let model = model * Mat4::translation(-50.0, -19.5, 0.0);
-
-        // Local transform to have the bottom of the carriage touch the ground
-        let model = model * Mat4::translation(0.0, -19.5, 0.0);
-
-        // Translate to world position
-        let model = model * Mat4::translation(x as f32, y, 0.0);
-
-        player.model_matrix = model;
-
-        // Scale to the image size
-        let model = Mat4::scale(20.0, 70.0, 1.0);
-
-        // Move origin to bottom center of cannon
-        let model = model * Mat4::translation(-10.0, -55.0, 0.0);
-
-        // Apply rotation
-        let model = model * Mat4::rotate(0.0, 0.0, player.cannon_angle);
-
-        // Move origin back
-        let model = model * Mat4::translation(10.0, 55.0, 0.0);
-
-        // local transform to move cannon to the carriage wheel center
-        let model = model * Mat4::translation(-10.0, -75.0, 0.0);
-
-        // Translate to world position
-        let model = model * Mat4::translation(x as f32, y, 0.0);
-
-        player.cannon_matrix = model;
+fn create_rocket(position: Vec3, velocity: Vec3) -> Rocket {
+    let rocket_model = Mat4::scale(86.0/8.0, 287.0/8.0, 0.0);
+    // Move origin of rocket to center of image
+    let rocket_model = rocket_model * Mat4::translation(-86.0/16.0, -287.0/16.0, 0.0);
+    Rocket {
+        local_model: rocket_model,
+        position: position,
+        velocity: velocity,
+        world_model: Mat4::identity()
     }
 }
 
@@ -465,6 +449,22 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
     match key_code {
         "ArrowLeft" => player.cannon_angle -= 2.0,
         "ArrowRight" => player.cannon_angle += 2.0,
+        " " => {
+            if game.game_state.rocket.is_none() {
+                let x = player.terrain_position;
+                let y = game.game_state.terrain_contour.get_index(x);
+
+                // Add an offset make it look like the rocket is leaving the cannon
+                let position = Vec3::new(x as f32 - 10.0, y - 15.0, 0.0);
+
+                let rad_per_degree = std::f32::consts::PI / 180.0f32;
+                let (sin, cos) = ((player.cannon_angle-90.0)*rad_per_degree).sin_cos();
+                let vx = 10.0 * cos;
+                let vy = 10.0 * sin;
+                let velocity = Vec3::new(vx, vy, 0.0);
+                game.game_state.rocket = Some(create_rocket(position, velocity));
+            }
+        },
         _ => return false
     };
 
@@ -472,8 +472,86 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
     true
 }
 
+fn update_players(game_state: &mut GameState) {
+    for player in &mut game_state.players {
+        let x = player.terrain_position;
+        let y = game_state.terrain_contour.get_index(x);
+
+        // Scale to image size
+        let model = Mat4::scale(100.0, 39.0, 1.0);
+
+        // Move origin to image center
+        let model = model * Mat4::translation(-50.0, -19.5, 0.0);
+
+        // Local transform to have the bottom of the carriage touch the ground
+        let model = model * Mat4::translation(0.0, -19.5, 0.0);
+
+        // Translate to world position
+        let model = model * Mat4::translation(x as f32, y, 0.0);
+
+        player.model_matrix = model;
+
+        // Scale to the image size
+        let model = Mat4::scale(20.0, 70.0, 1.0);
+
+        // Move origin to bottom center of cannon
+        let model = model * Mat4::translation(-10.0, -55.0, 0.0);
+
+        // Apply rotation
+        let model = model * Mat4::rotate(0.0, 0.0, player.cannon_angle);
+
+        // Move origin back
+        let model = model * Mat4::translation(10.0, 55.0, 0.0);
+
+        // local transform to move cannon to the carriage wheel center
+        let model = model * Mat4::translation(-10.0, -75.0, 0.0);
+
+        // Translate to world position
+        let model = model * Mat4::translation(x as f32, y, 0.0);
+
+        player.cannon_matrix = model;
+    }
+}
+
+fn is_rocket_in_bounds(rocket: &Rocket) -> bool{
+    let position = &rocket.position;
+
+    // TODO expose canvas width/height here
+    position.x() > 0.0 && position.y() > 0.0 &&
+    position.x() < 1024.0 && position.y() < 768.0
+}
+
+fn update_rocket(rocket: &mut Rocket, timestamp: f64) {
+    let model = rocket.local_model;
+
+    let gravity = Vec3::new(0.0, 0.1, 0.0);
+    rocket.velocity += gravity;
+    rocket.position += rocket.velocity;
+
+    // Rotate
+    let degree_per_rad = 180.0f32 / std::f32::consts::PI;
+
+    // Apply rotation
+    let rocket_angle = 90.0- degree_per_rad * (-rocket.velocity.y()).atan2(rocket.velocity.x());
+    let model = model * Mat4::rotate(0.0, 0.0, rocket_angle);
+
+    // Translate
+    let model = model * Mat4::translation(rocket.position.x(), rocket.position.y(), rocket.position.z());
+
+    rocket.world_model = model;
+}
+
 fn update(game: &mut TankGameFlyweight, timestamp: f64) {
     update_players(&mut game.game_state);
+
+    if let Some(rocket) = &mut game.game_state.rocket {
+        if is_rocket_in_bounds(rocket) {
+            update_rocket(rocket, timestamp);
+        } else {
+            game.game_state.rocket = None;
+            game.game_state.current_player = (game.game_state.current_player + 1) % game.game_state.players.len();
+        }
+    }
 }
 
 fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
@@ -522,6 +600,16 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
             player.model_matrix.data()
         );
         render_texture_with_mask(gl, &game.carriage_texture, &game.texture_sampler_uniform, &player.color_mask, &game.mask_sampler_uniform);
+    }
+
+    if let Some(rocket) = &game.game_state.rocket {
+        gl.uniform_matrix4fv_with_f32_array(
+            Some(&game.model_matrix_uniform),
+            false,
+            rocket.world_model.data()
+        );
+        let player = &game.game_state.players[game.game_state.current_player];
+        render_texture_with_mask(gl, &game.rocket_texture, &game.texture_sampler_uniform, &player.color_mask, &game.mask_sampler_uniform);
     }
 
     gl.bind_vertex_array(None);

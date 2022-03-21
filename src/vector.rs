@@ -1,4 +1,4 @@
-use std::ops::Sub;
+use std::ops::{Sub, Add, AddAssign};
 
 #[derive(Debug)]
 pub struct Vec3 {
@@ -49,6 +49,48 @@ impl Vec3 {
             self.data[0]*other.data[1] - self.data[1]*other.data[0]
         ] }
     }
+
+    pub fn dot(&self, other: &Vec3) -> f32 {
+        self.data[0]*other.data[0] +
+        self.data[1]*other.data[1] +
+        self.data[2]*other.data[2]
+    }
+}
+
+impl Add for Vec3 {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            data: [
+                self.data[0] + other.data[0],
+                self.data[1] + other.data[1],
+                self.data[2] + other.data[2],
+            ],
+        }
+    }
+}
+
+impl AddAssign for Vec3 {
+    fn add_assign(&mut self, other: Self) {
+        self.data[0] += other.data[0];
+        self.data[1] += other.data[1];
+        self.data[2] += other.data[2];
+    }
+}
+
+impl Copy for Vec3 { }
+
+impl Clone for Vec3 {
+    fn clone(&self) -> Vec3 {
+        Self {
+            data: [
+                self.data[0],
+                self.data[1],
+                self.data[2],
+            ],
+        }
+    }
 }
 
 impl Sub for Vec3 {
@@ -76,6 +118,16 @@ mod tests {
         assert_eq!(vec.x(), 1.0);
         assert_eq!(vec.y(), 2.0);
         assert_eq!(vec.z(), 3.0);
+    }
+
+    #[test]
+    fn add() {
+        let left = Vec3::new(1.0, 2.0, 3.0);
+        let right = Vec3::new(1.0, 2.0, 3.0);
+        let result = left + right;
+        assert_eq!(2f32, result.x());
+        assert_eq!(4f32, result.y());
+        assert_eq!(6f32, result.z());
     }
 
     #[test]
@@ -122,5 +174,12 @@ mod tests {
         assert_componentwise_equality(&i.cross(&j), &k);
         assert_componentwise_equality(&j.cross(&k), &i);
         assert_componentwise_equality(&k.cross(&i), &j);
+    }
+
+    #[test]
+    fn dot() {
+        let left = Vec3::new(1.0, 2.0, 3.0);
+        let right = Vec3::new(1.0, 2.0, 3.0);
+        assert_eq!(14.0, left.dot(&right));
     }
 }
