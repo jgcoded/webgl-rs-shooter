@@ -113,11 +113,11 @@ fn initialize(canvas: &HtmlCanvasElement, gl: &WebGl2RenderingContext) -> Result
     set_panic_hook();
     console::log_1(&"Initializing tank game".into());
 
-    let background_texture = load_image_as_texture(&gl, "assets/tankgame/background.jpg")?;
-    let foreground_texture = load_image_as_texture(&gl, "assets/tankgame/ground.jpg")?;
-    let carriage_texture = load_image_as_texture(&gl, "assets/tankgame/carriage.png")?;
-    let cannon_texture = load_image_as_texture(&gl, "assets/tankgame/cannon.png")?;
-    let rocket_texture = load_image_as_texture(&gl, "assets/tankgame/rocket.png")?;
+    let background_texture = load_image_as_texture(&gl, "assets/background.jpg")?;
+    let foreground_texture = load_image_as_texture(&gl, "assets/ground.jpg")?;
+    let carriage_texture = load_image_as_texture(&gl, "assets/carriage.png")?;
+    let cannon_texture = load_image_as_texture(&gl, "assets/cannon.png")?;
+    let rocket_texture = load_image_as_texture(&gl, "assets/rocket.png")?;
 
     let vertex_shader_source = r##"
 attribute vec4 aVertexPosition;
