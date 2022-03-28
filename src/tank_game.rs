@@ -393,9 +393,13 @@ void main(void) {
 }
 
 fn create_rocket(position: Vec3, velocity: Vec3) -> Rocket {
-    let rocket_model = Mat4::scale(86.0/8.0, 287.0/8.0, 0.0);
-    // Move origin of rocket to center of image
-    let rocket_model = rocket_model * Mat4::translation(-86.0/16.0, -287.0/16.0, 0.0);
+    let scale_factor = 1.0/8.0;
+    let rocket_model =
+        // Scale image
+        Mat4::scale(86.0*scale_factor, 287.0*scale_factor, 0.0)
+        // Move origin of rocket to center of image
+        * Mat4::translation((-86.0*scale_factor)/2.0, (-287.0*scale_factor)/2.0, 0.0);
+    
     Rocket {
         local_model: rocket_model,
         position: position,
@@ -475,39 +479,27 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
 fn update_players(game_state: &mut GameState) {
     for player in &mut game_state.players {
         let x = player.terrain_position;
-        let y = game_state.terrain_contour.get_index(x);
+        let y = game_state.terrain_contour.get_index(x) + -19.5;
 
-        // Scale to image size
-        let model = Mat4::scale(100.0, 39.0, 1.0);
-
-        // Move origin to image center
-        let model = model * Mat4::translation(-50.0, -19.5, 0.0);
-
-        // Local transform to have the bottom of the carriage touch the ground
-        let model = model * Mat4::translation(0.0, -19.5, 0.0);
-
-        // Translate to world position
-        let model = model * Mat4::translation(x as f32, y, 0.0);
+        let model =
+            // Scale to image size
+            Mat4::scale(100.0, 39.0, 1.0)
+            // Local transform to set local origin to image center
+            * Mat4::translation(-50.0, -19.5, 0.0)
+            // Translate to world position
+            * Mat4::translation(x as f32, y, 0.0);
 
         player.model_matrix = model;
 
-        // Scale to the image size
-        let model = Mat4::scale(20.0, 70.0, 1.0);
-
-        // Move origin to bottom center of cannon
-        let model = model * Mat4::translation(-10.0, -55.0, 0.0);
-
-        // Apply rotation
-        let model = model * Mat4::rotate(0.0, 0.0, player.cannon_angle);
-
-        // Move origin back
-        let model = model * Mat4::translation(10.0, 55.0, 0.0);
-
-        // local transform to move cannon to the carriage wheel center
-        let model = model * Mat4::translation(-10.0, -75.0, 0.0);
-
-        // Translate to world position
-        let model = model * Mat4::translation(x as f32, y, 0.0);
+        let model =
+            // Scale to the image size
+            Mat4::scale(20.0, 70.0, 1.0)
+            // Local transform to set local origin to rotation center
+            * Mat4::translation(-10.0, -55.0, 0.0)
+            // Apply rotation
+            * Mat4::rotate(0.0, 0.0, player.cannon_angle)
+            // Translate to world position
+            * Mat4::translation(x as f32, y, 0.0);
 
         player.cannon_matrix = model;
     }
@@ -522,7 +514,6 @@ fn is_rocket_in_bounds(rocket: &Rocket) -> bool{
 }
 
 fn update_rocket(rocket: &mut Rocket, timestamp: f64) {
-    let model = rocket.local_model;
 
     let gravity = Vec3::new(0.0, 0.1, 0.0);
     rocket.velocity += gravity;
@@ -532,11 +523,11 @@ fn update_rocket(rocket: &mut Rocket, timestamp: f64) {
     let degree_per_rad = 180.0f32 / std::f32::consts::PI;
 
     // Apply rotation
-    let rocket_angle = 90.0- degree_per_rad * (-rocket.velocity.y()).atan2(rocket.velocity.x());
-    let model = model * Mat4::rotate(0.0, 0.0, rocket_angle);
-
-    // Translate
-    let model = model * Mat4::translation(rocket.position.x(), rocket.position.y(), rocket.position.z());
+    let rocket_angle = 90.0 - degree_per_rad*(-rocket.velocity.y()).atan2(rocket.velocity.x());
+    let model = rocket.local_model
+        * Mat4::rotate(0.0, 0.0, rocket_angle)
+        // Translate
+        * Mat4::translation(rocket.position.x(), rocket.position.y(), rocket.position.z());
 
     rocket.world_model = model;
 }

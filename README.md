@@ -22,7 +22,7 @@ $ wasm-pack build && npm run serve
 
 Then visit http://localhost:8080/ on your browser.
 
-# References
+## References
 
 
 https://rustwasm.github.io/docs.html
@@ -37,3 +37,13 @@ https://rustwasm.github.io/wasm-bindgen/examples/paint.html
 https://github.com/simondarksidej/XNAGameStudio/wiki/Riemers2DXNAoverview
 
 https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code#handle_keyboard_events_in_a_game
+
+## Potential game art
+
+https://opengameart.org/content/animated-tank
+
+https://opengameart.org/content/tileset-and-assets-for-a-scorched-earth-type-game
+
+https://opengameart.org/content/backgrounds-for-2d-platformers
+
+http://google.github.io/tracing-framework/
