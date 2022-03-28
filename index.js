@@ -1,7 +1,6 @@
 
 import './site.css';
 
-import { greet, tank_game } from './pkg';
-greet();
+import { start_game } from './pkg';
 
-tank_game('canvas');
+start_game('canvas');

@@ -1,11 +1,6 @@
 use std::convert::TryInto;
-
-use js_sys::Float32Array;
-use wasm_bindgen::{JsCast, JsValue, prelude::Closure};
-use web_sys::{WebGl2RenderingContext, HtmlCanvasElement};
-
-use crate::{vector::Vec3, matrix::Mat4};
-
+use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext};
 
 pub fn set_panic_hook() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
@@ -33,14 +28,15 @@ pub fn get_canvas(canvas_id: &str) -> Result<HtmlCanvasElement, JsValue> {
     Ok(canvas)
 }
 
-pub fn get_rendering_context(canvas: &HtmlCanvasElement) -> Result<WebGl2RenderingContext, JsValue> {
-    
+pub fn get_rendering_context(
+    canvas: &HtmlCanvasElement,
+) -> Result<WebGl2RenderingContext, JsValue> {
     // set per MDN docs
     canvas.set_width(canvas.client_width().try_into().unwrap());
     canvas.set_height(canvas.client_height().try_into().unwrap());
 
-    let gl =
-        canvas.get_context("webgl2")?
+    let gl = canvas
+        .get_context("webgl2")?
         .unwrap()
         .dyn_into::<web_sys::WebGl2RenderingContext>()?;
 
@@ -51,7 +47,7 @@ pub fn get_rendering_context(canvas: &HtmlCanvasElement) -> Result<WebGl2Renderi
         if you resize the canvas, you will
         need to tell the WebGL context a new
         viewport setting. In this situation,
-        you can use gl.viewport. 
+        you can use gl.viewport.
     */
     gl.viewport(0, 0, gl.drawing_buffer_width(), gl.drawing_buffer_height());
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
@@ -64,20 +60,4 @@ pub fn request_animation_frame(f: &Closure<dyn FnMut(&JsValue)>) {
     window()
         .request_animation_frame(f.as_ref().unchecked_ref())
         .expect("should register `requestAnimationFrame` OK");
-}
-
-impl Vec3 {
-    pub fn to_js(&self) -> Float32Array {
-        let data = Float32Array::new_with_length(3);
-        data.copy_from(self.data());
-        data
-    }
-}
-
-impl Mat4 {
-    pub fn to_js(&self) -> Float32Array {
-        let data = Float32Array::new_with_length(3);
-        data.copy_from(self.data());
-        data
-    }
 }

@@ -1,19 +1,17 @@
-use std::convert::TryInto;
 use std::rc::Rc;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::console;
-use web_sys::{WebGl2RenderingContext, HtmlImageElement, WebGlTexture};
+use web_sys::{HtmlImageElement, WebGl2RenderingContext, WebGlTexture};
 
 pub fn create_rgba_texture_from_array_buffer_view(
     gl: &WebGl2RenderingContext,
     width: i32,
     height: i32,
-    src_data: &js_sys::Uint8Array
+    src_data: &js_sys::Uint8Array,
 ) -> Result<WebGlTexture, JsValue> {
-
-    let texture = gl.create_texture()
+    let texture = gl
+        .create_texture()
         .ok_or_else(|| String::from("Could not make new webgl texture"))?;
 
     gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
@@ -34,17 +32,17 @@ pub fn create_rgba_texture_from_array_buffer_view(
         border,
         src_format,
         src_type,
-        Some(src_data)
+        Some(src_data),
     )?;
 
     gl.generate_mipmap(WebGl2RenderingContext::TEXTURE_2D);
-/*
-    gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_WRAP_S, WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
-    gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_WRAP_T, WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
+    /*
+        gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_WRAP_S, WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
+        gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_WRAP_T, WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
 
-    gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_MAG_FILTER, WebGl2RenderingContext::NEAREST as i32);
-    gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_MIN_FILTER, WebGl2RenderingContext::NEAREST as i32);
-*/
+        gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_MAG_FILTER, WebGl2RenderingContext::NEAREST as i32);
+        gl.tex_parameteri(WebGl2RenderingContext::TEXTURE_2D, WebGl2RenderingContext::TEXTURE_MIN_FILTER, WebGl2RenderingContext::NEAREST as i32);
+    */
     gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
 
     Ok(texture)
@@ -54,10 +52,10 @@ pub fn create_rgba_texture_from_u8_array(
     gl: &WebGl2RenderingContext,
     width: i32,
     height: i32,
-    src_data: &[u8]
+    src_data: &[u8],
 ) -> Result<WebGlTexture, JsValue> {
-
-    let texture = gl.create_texture()
+    let texture = gl
+        .create_texture()
         .ok_or_else(|| String::from("Could not make new webgl texture"))?;
 
     gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
@@ -78,7 +76,7 @@ pub fn create_rgba_texture_from_u8_array(
         border,
         src_format,
         src_type,
-        Some(&src_data)
+        Some(&src_data),
     )?;
 
     gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
@@ -90,16 +88,11 @@ pub fn create_rgba_texture_from_u8_array(
 // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Using_textures_in_WebGL
 pub fn load_image_as_texture(
     gl: &WebGl2RenderingContext,
-    source: &str
+    source: &str,
 ) -> Result<Rc<WebGlTexture>, JsValue> {
+    let src_data = [0u8, 0u8, 255u8, 255u8]; // opaque blue
 
-    let src_data = [0u8, 0u8, 255u8, 255u8];  // opaque blue
-
-    let texture = create_rgba_texture_from_u8_array(
-        gl, 
-        1, 
-        1, 
-        &src_data)?;
+    let texture = create_rgba_texture_from_u8_array(gl, 1, 1, &src_data)?;
 
     let image = HtmlImageElement::new()?;
     let image_rc = Rc::new(image);
@@ -124,20 +117,19 @@ pub fn load_image_as_texture(
                 internal_format,
                 src_format,
                 src_type,
-                &image
+                &image,
             );
 
             match result {
                 Err(e) => {
                     web_sys::console::log_2(&"load_texture".into(), &e);
                     return;
-                },
-                _ => ()
+                }
+                _ => (),
             };
 
             gl.generate_mipmap(WebGl2RenderingContext::TEXTURE_2D);
             gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
-
         }) as Box<dyn FnMut()>);
 
         image_rc.set_onload(Some(on_load_callback.as_ref().unchecked_ref()));

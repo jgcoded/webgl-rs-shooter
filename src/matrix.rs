@@ -1,12 +1,10 @@
-use std::ops::{Mul, Add};
-
-use crate::vector::Vec3;
+use std::ops::{Add, Mul};
 
 #[derive(Copy, Clone)]
 pub struct Mat4 {
     data: [f32; 16],
 }
-// TODO camera LookAt matrix https://learnopengl.com/Getting-started/Camera
+
 impl Mat4 {
     pub fn new(values: [f32; 16]) -> Mat4 {
         Mat4 { data: values }
@@ -18,53 +16,24 @@ impl Mat4 {
         ])
     }
 
-    pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
-        let rad_per_degree = std::f32::consts::PI / 180.0f32;
-        let fov = fov * rad_per_degree;
-        let frustum_scale = 1.0f32 / (fov / 2.0).tan();
-
-        Mat4::new([
-            frustum_scale / aspect,
-            0f32,
-            0f32,
-            0f32, // 3
-            0f32,
-            frustum_scale,
-            0f32,
-            0f32, // 7
-            0f32,
-            0f32,
-            (far + near) / (near - far),
-            -1.0f32, // 11
-            0f32,
-            0f32,
-            (2.0f32 * far * near) / (near - far),
-            0f32, // 15
-        ])
-    }
-
-    /*
-    pub fn look_at(camera_pos: Vec3, target_pos: Vec3, up: Vec3) -> Mat4 {
-
-        let camera_direction = (camera_pos - target_pos).normalized();
-        let camera_right = camera_direction.cross(&up).normalized();
-        let camera_up = camera_direction.cross(&camera_right);
-
-        // https://learnopengl.com/Getting-started/Camera
-        // https://github.com/g-truc/glm/blob/b3f87720261d623986f164b2a7f6a0a938430271/glm/ext/matrix_transform.inl
-
-        // how come glm uses the dot product??
-
-        Mat4::identity()
-    }
-    */
-
     pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
         Mat4::new([
-            2.0 / (right - left), 0.0, 0.0, 0.0,
-            0.0, 2.0/(top-bottom), 0.0, 0.0,
-            0.0, 0.0, -2.0/(far - near), 0.0,
-            -(right + left)/(right-left), -(top+bottom)/(top-bottom), -(far+near)/(far - near), 1.0
+            2.0 / (right - left),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0 / (top - bottom),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -2.0 / (far - near),
+            0.0,
+            -(right + left) / (right - left),
+            -(top + bottom) / (top - bottom),
+            -(far + near) / (far - near),
+            1.0,
         ])
     }
 
@@ -80,42 +49,13 @@ impl Mat4 {
         ])
     }
 
-    pub fn rotate(x: f32, y: f32, z: f32) -> Mat4 {
-
-        // TODO use quaternions to represent rotations
-        // https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation#Using_quaternion_as_rotations
-        // https://en.wikipedia.org/wiki/Quaternion#Hamilton_product
-        // https://www.cs.cmu.edu/~kiranb/animation/p245-shoemake.pdf
-        
-        let mut rot_x = Mat4::identity();
-        let mut rot_y = Mat4::identity();
-        let rot_z = Mat4::rotateZ(z);
-
-        let rad_per_degree = std::f32::consts::PI / 180.0f32;
-
-        let rad_x = x*rad_per_degree;
-        let rad_y = y*rad_per_degree;
-
-        rot_x.data[5] = rad_x.cos();
-        rot_x.data[6] = rad_x.sin();
-        rot_x.data[9] = -rad_x.sin();
-        rot_x.data[10] = rad_x.cos();
-
-        rot_y.data[0] = rad_y.cos();
-        rot_y.data[2] = -rad_y.sin();
-        rot_y.data[8] = rad_y.sin();
-        rot_y.data[10] = rad_y.cos();
-
-        rot_x * rot_y * rot_z
-    }
-
-    pub fn rotateZ(z: f32) -> Mat4 {
+    pub fn rotate_z(z: f32) -> Mat4 {
         // https://github.com/MonoGame/MonoGame/blob/da9227e1347a7587d50cfe9b09c01d33610d4fba/MonoGame.Framework/Matrix.cs#L1148
         let mut rot_z = Mat4::identity();
 
         let rad_per_degree = std::f32::consts::PI / 180.0f32;
 
-        let rad_z = z*rad_per_degree;
+        let rad_z = z * rad_per_degree;
 
         rot_z.data[0] = rad_z.cos();
         rot_z.data[1] = rad_z.sin();
@@ -151,8 +91,8 @@ impl Add for Mat4 {
                 self.data[12] + other.data[12],
                 self.data[13] + other.data[13],
                 self.data[14] + other.data[14],
-                self.data[15] + other.data[15]
-            ]
+                self.data[15] + other.data[15],
+            ],
         }
     }
 }
@@ -317,31 +257,6 @@ mod tests {
     }
 
     #[test]
-    fn perspective_test() {
-        let mat = Mat4::perspective(45.0f32, 640.0f32 / 480.0f32, 0.1f32, 100.0f32);
-        let data = mat.data();
-        threshold_assert(1.8106601238250732f32, data[0]);
-        threshold_assert(0.0f32, data[1]);
-        threshold_assert(0.0f32, data[2]);
-        threshold_assert(0.0f32, data[3]);
-
-        threshold_assert(0.0f32, data[4]);
-        threshold_assert(2.4142136573791504f32, data[5]);
-        threshold_assert(0.0f32, data[6]);
-        threshold_assert(0.0f32, data[7]);
-
-        threshold_assert(0.0f32, data[8]);
-        threshold_assert(0.0f32, data[9]);
-        threshold_assert(-1.0020020008087158f32, data[10]);
-        threshold_assert(-1.0f32, data[11]);
-
-        threshold_assert(0.0f32, data[12]);
-        threshold_assert(0.0f32, data[13]);
-        threshold_assert(-0.20020020008087158f32, data[14]);
-        threshold_assert(0.0f32, data[15]);
-    }
-
-    #[test]
     fn matmul_test() {
         let left = Mat4::identity();
         let right = Mat4::identity();
@@ -351,7 +266,6 @@ mod tests {
 
         let result = left * right;
         let data = result.data();
-
 
         println!("result:\t {:?}", data);
 
@@ -402,24 +316,10 @@ mod tests {
         threshold_assert(1.0f32, data[15]);
     }
 
+    #[test]
     fn addition_test() {
         let left = Mat4::new([
-            1.0,
-            2.0,
-            3.0,
-            4.0,
-            5.0,
-            6.0,
-            7.0,
-            8.0,
-            9.0,
-            10.0,
-            11.0,
-            12.0,
-            13.0,
-            14.0,
-            15.0,
-            16.0
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
         ]);
 
         let right = left.clone();
@@ -427,7 +327,7 @@ mod tests {
         let result = left + right;
 
         for i in 0..result.data.len() {
-            assert_eq!(2.0*(i+1) as f32, result.data[i]);
+            assert_eq!(2.0 * (i + 1) as f32, result.data[i]);
         }
     }
 }

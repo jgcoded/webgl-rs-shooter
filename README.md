@@ -33,10 +33,14 @@ https://docs.rs/js-sys/latest/js_sys/
 
 https://rustwasm.github.io/wasm-bindgen/introduction.html
 https://rustwasm.github.io/wasm-bindgen/examples/paint.html
+https://rustwasm.github.io/wasm-bindgen/examples/request-animation-frame.html
 
 https://github.com/simondarksidej/XNAGameStudio/wiki/Riemers2DXNAoverview
 
+https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Using_textures_in_WebGL
 https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code#handle_keyboard_events_in_a_game
+
+https://learnopengl.com/In-Practice/2D-Game/Rendering-Sprites
 
 ## Potential game art
 
