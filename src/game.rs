@@ -212,10 +212,15 @@ fn initialize(
     ];
 
     for player in &mut players {
+        let x = player.terrain_position;
+        let y = terrain_contour.get_index(x) + -19.5;
         player.carriage_sprite.global_scale = Vec3::new(100.0, 39.0, 1.0);
         player.carriage_sprite.local_position = Vec3::new(-50.0, -19.5, 0.0);
+        player.carriage_sprite.global_position = Vec3::new(x as f32, y, 0.0);
+        player.carriage_sprite.update();
         player.cannon_sprite.global_scale = Vec3::new(20.0, 70.0, 1.0);
         player.cannon_sprite.local_position = Vec3::new(-10.0, -55.0, 0.0);
+        player.cannon_sprite.global_position = Vec3::new(x as f32, y, 0.0);
     }
 
     let game_state = GameState {
@@ -238,11 +243,20 @@ fn initialize(
 fn create_rocket(
     texture: Rc<WebGlTexture>,
     mask: Rc<WebGlTexture>,
-    position: Vec3,
-    velocity: Vec3,
+    cannon_angle: f32,
+    cannon_x: f32,
+    cannon_y: f32
 ) -> Rocket {
-    let scale_factor = 1.0 / 8.0;
+    // Add an offset make it look like the rocket is leaving the cannon
+    let position = Vec3::new(cannon_x as f32 - 10.0, cannon_y - 15.0, 0.0);
 
+    let power = 400.0;
+    let (sin, cos) = ((cannon_angle - 90.0).to_radians()).sin_cos();
+    let vx = power * cos;
+    let vy = power * sin;
+    let velocity = Vec3::new(vx, vy, 0.0);
+
+    let scale_factor = 1.0 / 8.0;
     let mut sprite = Sprite::new(texture, mask);
     sprite.global_scale = Vec3::new(86.0 * scale_factor, 287.0 * scale_factor, 0.0);
     sprite.local_position = Vec3::new(
@@ -302,18 +316,11 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                 let x = player.terrain_position;
                 let y = game.game_state.terrain_contour.get_index(x);
 
-                // Add an offset make it look like the rocket is leaving the cannon
-                let position = Vec3::new(x as f32 - 10.0, y - 15.0, 0.0);
-
-                let (sin, cos) = ((player.cannon_angle - 90.0).to_radians()).sin_cos();
-                let vx = 400.0 * cos;
-                let vy = 400.0 * sin;
-                let velocity = Vec3::new(vx, vy, 0.0);
                 game.game_state.rocket = Some(create_rocket(
                     game.rocket_texture.clone(),
                     player.cannon_sprite.mask(),
-                    position,
-                    velocity,
+                    player.cannon_angle,
+                    x as f32, y
                 ));
             }
         }
@@ -326,14 +333,7 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
 
 fn update_players(game_state: &mut GameState) {
     for player in &mut game_state.players {
-        let x = player.terrain_position;
-        let y = game_state.terrain_contour.get_index(x) + -19.5;
-
-        player.carriage_sprite.global_position = Vec3::new(x as f32, y, 0.0);
-        player.carriage_sprite.update();
-
         player.cannon_sprite.global_rotation = player.cannon_angle;
-        player.cannon_sprite.global_position = Vec3::new(x as f32, y, 0.0);
         player.cannon_sprite.update()
     }
 }
@@ -347,7 +347,7 @@ fn is_rocket_in_bounds(rocket: &Rocket) -> bool {
 
 fn update_rocket(rocket: &mut Rocket, dt: f32) {
     let gravity = Vec3::new(0.0, 150.0, 0.0);
-    rocket.sprite.global_position += rocket.velocity.scaled(dt) + gravity.scaled(0.5*dt*dt);
+    rocket.sprite.global_position += rocket.velocity.scaled(dt) + gravity.scaled(0.5 * dt * dt);
     rocket.velocity += gravity.scaled(dt);
 
     // Apply rotation
