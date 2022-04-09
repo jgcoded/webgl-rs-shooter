@@ -9,7 +9,7 @@ pub fn create_rgba_texture_from_array_buffer_view(
     width: i32,
     height: i32,
     src_data: &js_sys::Uint8Array,
-) -> Result<WebGlTexture, JsValue> {
+) -> Result<Rc<WebGlTexture>, JsValue> {
     let texture = gl
         .create_texture()
         .ok_or_else(|| String::from("Could not make new webgl texture"))?;
@@ -45,7 +45,7 @@ pub fn create_rgba_texture_from_array_buffer_view(
     */
     gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
 
-    Ok(texture)
+    Ok(Rc::new(texture))
 }
 
 pub fn create_rgba_texture_from_u8_array(
@@ -53,7 +53,7 @@ pub fn create_rgba_texture_from_u8_array(
     width: i32,
     height: i32,
     src_data: &[u8],
-) -> Result<WebGlTexture, JsValue> {
+) -> Result<Rc<WebGlTexture>, JsValue> {
     let texture = gl
         .create_texture()
         .ok_or_else(|| String::from("Could not make new webgl texture"))?;
@@ -81,7 +81,7 @@ pub fn create_rgba_texture_from_u8_array(
 
     gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, None);
 
-    Ok(texture)
+    Ok(Rc::new(texture))
 }
 
 // texture loading based off of
@@ -96,7 +96,7 @@ pub fn load_image_as_texture(
 
     let image = HtmlImageElement::new()?;
     let image_rc = Rc::new(image);
-    let texture_rc = Rc::new(texture);
+    let texture_rc = texture.clone();
 
     {
         let image = image_rc.clone();

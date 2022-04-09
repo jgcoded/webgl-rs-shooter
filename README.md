@@ -24,6 +24,8 @@ Then visit http://localhost:8080/ on your browser.
 
 ## References
 
+https://doc.rust-lang.org/stable/book/
+https://doc.rust-lang.org/stable/rust-by-example/index.html
 
 https://rustwasm.github.io/docs.html
 https://rustwasm.github.io/book/introduction.html

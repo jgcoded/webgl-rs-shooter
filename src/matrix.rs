@@ -53,9 +53,7 @@ impl Mat4 {
         // https://github.com/MonoGame/MonoGame/blob/da9227e1347a7587d50cfe9b09c01d33610d4fba/MonoGame.Framework/Matrix.cs#L1148
         let mut rot_z = Mat4::identity();
 
-        let rad_per_degree = std::f32::consts::PI / 180.0f32;
-
-        let rad_z = z * rad_per_degree;
+        let rad_z = z.to_radians();
 
         rot_z.data[0] = rad_z.cos();
         rot_z.data[1] = rad_z.sin();

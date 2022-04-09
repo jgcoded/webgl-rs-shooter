@@ -1,4 +1,4 @@
-// https://github.com/jgcoded/me/blob/d28853a7c604ad9de0669b6250b1b097379c1f15/src/pages/arcade.js
+
 use web_sys::{WebGl2RenderingContext, WebGlProgram, WebGlShader};
 
 pub fn compile_shader(

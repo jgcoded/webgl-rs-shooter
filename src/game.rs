@@ -1,36 +1,31 @@
 use std::cell::RefCell;
-use std::convert::TryInto;
 use std::rc::Rc;
 
 use crate::dom::window;
+use crate::shader_cache::ShaderCache;
+use crate::sprite::Sprite;
+use crate::sprite_renderer::SpriteRenderer;
 use crate::texture::{
     create_rgba_texture_from_array_buffer_view, create_rgba_texture_from_u8_array,
     load_image_as_texture,
 };
 use crate::vector::Vec3;
 
-use super::buffer::{create_square_buffer, create_texture_buffer};
 use super::dom::{get_canvas, get_rendering_context, request_animation_frame, set_panic_hook};
 use super::matrix::Mat4;
-use super::shader::{compile_shader, link_program};
+
 use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{
-    console, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext, WebGlProgram, WebGlTexture,
-    WebGlUniformLocation, WebGlVertexArrayObject,
-};
+use web_sys::{console, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext, WebGlTexture};
 
 struct Player {
     terrain_position: u32,
-    model_matrix: Mat4,
-    cannon_matrix: Mat4,
-    color_mask: WebGlTexture,
+    carriage_sprite: Sprite,
+    cannon_sprite: Sprite,
     cannon_angle: f32,
 }
 
 struct Rocket {
-    local_model: Mat4,
-    world_model: Mat4,
-    position: Vec3,
+    sprite: Sprite,
     velocity: Vec3,
 }
 
@@ -42,21 +37,10 @@ struct GameState {
 }
 
 struct TankGameFlyweight {
-    background_texture: Rc<WebGlTexture>,
-    program: WebGlProgram,
-    projection_matrix_uniform: WebGlUniformLocation,
-    model_matrix_uniform: WebGlUniformLocation,
-    texture_sampler_uniform: WebGlUniformLocation,
-    mask_sampler_uniform: WebGlUniformLocation,
-    projection: Mat4,
-    background_model_matrix: Mat4,
-    vertex_array_object: WebGlVertexArrayObject,
-    foreground_mask_texture: WebGlTexture,
-    foreground_texture: Rc<WebGlTexture>,
-    one_mask: WebGlTexture,
-    carriage_texture: Rc<WebGlTexture>,
-    cannon_texture: Rc<WebGlTexture>,
+    foreground_sprite: Sprite,
+    background_sprite: Sprite,
     game_state: GameState,
+    sprite_renderer: SpriteRenderer,
     rocket_texture: Rc<WebGlTexture>,
 }
 
@@ -114,201 +98,46 @@ fn initialize(
     let carriage_texture = load_image_as_texture(&gl, "assets/carriage.png")?;
     let cannon_texture = load_image_as_texture(&gl, "assets/cannon.png")?;
     let rocket_texture = load_image_as_texture(&gl, "assets/rocket.png")?;
-
-    let vertex_shader_source = r##"
-attribute vec4 aVertexPosition;
-attribute vec2 aTextureCoord;
-
-uniform mat4 uModelMatrix;
-uniform mat4 uProjectionMatrix;
-
-varying highp vec2 vTextureCoord;
-
-void main(void) {
-  gl_Position = uProjectionMatrix * uModelMatrix * aVertexPosition;
-  vTextureCoord = aTextureCoord;
-}
-    "##;
-
-    let fragment_shader_source = r##"
-precision mediump float;
-
-varying highp vec2 vTextureCoord;
-
-uniform sampler2D uTextureSampler;
-uniform sampler2D uMaskSampler;
-
-void main(void) {
-    vec4 color = texture2D(uTextureSampler, vTextureCoord);
-    vec4 mask = texture2D(uMaskSampler, vTextureCoord);
-
-    gl_FragColor = mask * color;
-}
-    "##;
-
-    let vertex_shader = compile_shader(
-        &gl,
-        WebGl2RenderingContext::VERTEX_SHADER,
-        vertex_shader_source,
-    )?;
-
-    let fragment_shader = compile_shader(
-        &gl,
-        WebGl2RenderingContext::FRAGMENT_SHADER,
-        fragment_shader_source,
-    )?;
-
-    let program = link_program(&gl, &vertex_shader, &fragment_shader)?;
-
-    let vertex_position_attrib = gl.get_attrib_location(&program, "aVertexPosition");
-    let vertex_texture_attrib = gl.get_attrib_location(&program, "aTextureCoord");
-
-    let projection_matrix_uniform = gl
-        .get_uniform_location(&program, "uProjectionMatrix")
-        .ok_or_else(|| String::from("Could not get project uniform location"))?;
-
-    let model_matrix_uniform = gl
-        .get_uniform_location(&program, "uModelMatrix")
-        .ok_or_else(|| String::from("Could not get model uniform location"))?;
-
-    let texture_sampler_uniform = gl
-        .get_uniform_location(&program, "uTextureSampler")
-        .ok_or_else(|| String::from("Could not get texture sampler uniform location"))?;
-
-    let mask_sampler_uniform = gl
-        .get_uniform_location(&program, "uMaskSampler")
-        .ok_or_else(|| String::from("Could not get mask sampler uniform location"))?;
-
-    let square_buffer = create_square_buffer(&gl)?;
-    let texture_buffer = create_texture_buffer(&gl)?;
-
-    let vertex_array_object = gl
-        .create_vertex_array()
-        .ok_or_else(|| String::from("Could not create VAO"))?;
-
-    gl.bind_vertex_array(Some(&vertex_array_object));
-
-    {
-        let num_components = 2;
-        let buffer_type = WebGl2RenderingContext::FLOAT;
-        let normalized = false;
-        let stride = 0;
-        let offset = 0;
-        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&square_buffer));
-        gl.vertex_attrib_pointer_with_i32(
-            vertex_position_attrib.try_into().unwrap(),
-            num_components,
-            buffer_type,
-            normalized,
-            stride,
-            offset,
-        );
-        gl.enable_vertex_attrib_array(vertex_position_attrib.try_into().unwrap());
-    }
-
-    {
-        let num_components = 2;
-        let buffer_type = WebGl2RenderingContext::FLOAT;
-        let normalized = false;
-        let stride = 0;
-        let offset = 0;
-        gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&texture_buffer));
-        gl.vertex_attrib_pointer_with_i32(
-            vertex_texture_attrib.try_into().unwrap(),
-            num_components,
-            buffer_type,
-            normalized,
-            stride,
-            offset,
-        );
-        gl.enable_vertex_attrib_array(vertex_texture_attrib.try_into().unwrap());
-    }
-
-    let projection = Mat4::orthographic(
-        0.0,
-        canvas.client_width() as f32,
-        canvas.client_height() as f32,
-        0.0,
-        -1.0,
-        1.0,
-    );
-
-    let translate = Mat4::translation(0.0, 0.0, 0.0);
-    let scale = Mat4::scale(
-        canvas.client_width() as f32,
-        canvas.client_height() as f32,
-        0.0,
-    ); // Mat4::scale(1024.0/768.0, 1.0, 1.0);
-    let background_model_matrix = scale * translate;
-
-    let mut contour = js_sys::Float32Array::new_with_length(canvas.client_width() as u32);
-    generate_terrain_contour(&mut contour, canvas.client_height() as f32);
-
+    let mask_array = [255, 255, 255, 255];
+    let white_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
     let mask_array = [255, 0, 0, 255];
     let red_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
-
     let mask_array = [0, 255, 0, 255];
     let green_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
-
     let mask_array = [0, 0, 255, 255];
     let blue_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
-
     let mask_array = [255, 0, 255, 255];
     let purple_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
 
-    let mut game_state = GameState {
-        current_player: 0,
-        terrain_contour: contour,
-        rocket: None,
-        players: [
-            Player {
-                terrain_position: (0.15f32 * canvas.client_width() as f32) as u32,
-                model_matrix: Mat4::identity(),
-                color_mask: red_mask,
-                cannon_matrix: Mat4::identity(),
-                cannon_angle: 45.0,
-            },
-            Player {
-                terrain_position: (0.3f32 * canvas.client_width() as f32) as u32,
-                model_matrix: Mat4::identity(),
-                color_mask: green_mask,
-                cannon_matrix: Mat4::identity(),
-                cannon_angle: 45.0,
-            },
-            Player {
-                terrain_position: (0.5f32 * canvas.client_width() as f32) as u32,
-                model_matrix: Mat4::identity(),
-                color_mask: blue_mask,
-                cannon_matrix: Mat4::identity(),
-                cannon_angle: 45.0,
-            },
-            Player {
-                terrain_position: (0.75f32 * canvas.client_width() as f32) as u32,
-                model_matrix: Mat4::identity(),
-                color_mask: purple_mask,
-                cannon_matrix: Mat4::identity(),
-                cannon_angle: 45.0,
-            },
-        ],
-    };
+    let shader_cache = ShaderCache::new(gl)?;
+    let sprite_renderer = SpriteRenderer::new(gl, shader_cache.sprite_shader())?;
 
-    for player in &game_state.players {
-        let start = (player.terrain_position - 50).max(0);
-        let end = (player.terrain_position + 50).min(canvas.client_width() as u32);
-        let height = game_state.terrain_contour.get_index(start);
+    let mut terrain_contour = js_sys::Float32Array::new_with_length(canvas.client_width() as u32);
+    generate_terrain_contour(&mut terrain_contour, canvas.client_height() as f32);
+
+    let player_positions = [
+        (0.15f32 * canvas.client_width() as f32) as u32,
+        (0.3f32 * canvas.client_width() as f32) as u32,
+        (0.5f32 * canvas.client_width() as f32) as u32,
+        (0.75f32 * canvas.client_width() as f32) as u32,
+    ];
+
+    // Flatten the terrain under the player positions
+    for position in player_positions {
+        let start = (position - 50).max(0);
+        let end = (position + 50).min(canvas.client_width() as u32);
+        let height = terrain_contour.get_index(start);
         for i in start..end {
-            game_state.terrain_contour.set_index(i, height);
+            terrain_contour.set_index(i, height);
         }
     }
-
-    update_players(&mut game_state);
 
     let buffer_size = (canvas.client_width() * canvas.client_height() * 4) as u32;
     let mut foreground_mask_buffer = js_sys::Uint8Array::new_with_length(buffer_size);
 
     generate_foreground_mask_buffer(
         &mut foreground_mask_buffer,
-        &game_state.terrain_contour,
+        &terrain_contour,
         canvas.client_width() as u32,
         canvas.client_height() as u32,
     );
@@ -320,43 +149,108 @@ void main(void) {
         &mut foreground_mask_buffer,
     )?;
 
-    let mask_array = [255, 255, 255, 255];
-    let one_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
+    let mut foreground_sprite = Sprite::new(foreground_texture, foreground_mask_texture);
+    foreground_sprite.global_scale = Vec3::new(
+        canvas.client_width() as f32,
+        canvas.client_height() as f32,
+        1.0,
+    );
+    foreground_sprite.update();
+
+    let mut background_sprite = Sprite::new(background_texture, white_mask);
+    background_sprite.global_scale = Vec3::new(
+        canvas.client_width() as f32,
+        canvas.client_height() as f32,
+        1.0,
+    );
+    background_sprite.update();
+
+    let projection = Mat4::orthographic(
+        0.0,
+        canvas.client_width() as f32,
+        canvas.client_height() as f32,
+        0.0,
+        -1.0,
+        1.0,
+    );
+
+    let sprite_shader = shader_cache.sprite_shader();
+    gl.use_program(Some(sprite_shader.program()));
+    gl.uniform_matrix4fv_with_f32_array(
+        Some(sprite_shader.projection_matrix_uniform()),
+        false,
+        projection.data(),
+    );
+    gl.use_program(None);
+
+    let mut players = [
+        Player {
+            terrain_position: player_positions[0],
+            cannon_angle: 45.0,
+            cannon_sprite: Sprite::new(cannon_texture.clone(), red_mask.clone()),
+            carriage_sprite: Sprite::new(carriage_texture.clone(), red_mask.clone()),
+        },
+        Player {
+            terrain_position: player_positions[1],
+            cannon_angle: 45.0,
+            cannon_sprite: Sprite::new(cannon_texture.clone(), green_mask.clone()),
+            carriage_sprite: Sprite::new(carriage_texture.clone(), green_mask.clone()),
+        },
+        Player {
+            terrain_position: player_positions[2],
+            cannon_angle: 45.0,
+            cannon_sprite: Sprite::new(cannon_texture.clone(), blue_mask.clone()),
+            carriage_sprite: Sprite::new(carriage_texture.clone(), blue_mask.clone()),
+        },
+        Player {
+            terrain_position: player_positions[3],
+            cannon_angle: 45.0,
+            cannon_sprite: Sprite::new(cannon_texture.clone(), purple_mask.clone()),
+            carriage_sprite: Sprite::new(carriage_texture.clone(), purple_mask.clone()),
+        },
+    ];
+
+    for player in &mut players {
+        player.carriage_sprite.global_scale = Vec3::new(100.0, 39.0, 1.0);
+        player.carriage_sprite.local_position = Vec3::new(-50.0, -19.5, 0.0);
+        player.cannon_sprite.global_scale = Vec3::new(20.0, 70.0, 1.0);
+        player.cannon_sprite.local_position = Vec3::new(-10.0, -55.0, 0.0);
+    }
+
+    let game_state = GameState {
+        current_player: 0,
+        terrain_contour,
+        rocket: None,
+        players,
+    };
 
     Ok(TankGameFlyweight {
-        background_texture: background_texture,
-        background_model_matrix: background_model_matrix,
-        model_matrix_uniform: model_matrix_uniform,
-        program: program,
-        projection: projection,
-        projection_matrix_uniform: projection_matrix_uniform,
-        texture_sampler_uniform: texture_sampler_uniform,
-        mask_sampler_uniform: mask_sampler_uniform,
-        vertex_array_object: vertex_array_object,
-        foreground_mask_texture: foreground_mask_texture,
-        one_mask: one_mask,
-        game_state: game_state,
-        foreground_texture: foreground_texture,
-        carriage_texture: carriage_texture,
-        cannon_texture: cannon_texture,
-        rocket_texture: rocket_texture,
+        foreground_sprite,
+        background_sprite,
+        game_state,
+        sprite_renderer,
+        rocket_texture,
     })
 }
 
-fn create_rocket(position: Vec3, velocity: Vec3) -> Rocket {
+fn create_rocket(
+    texture: Rc<WebGlTexture>,
+    mask: Rc<WebGlTexture>,
+    position: Vec3,
+    velocity: Vec3,
+) -> Rocket {
     let scale_factor = 1.0 / 8.0;
-    let rocket_model =
-        // Scale image
-        Mat4::scale(86.0*scale_factor, 287.0*scale_factor, 0.0)
-        // Move origin of rocket to center of image
-        * Mat4::translation((-86.0*scale_factor)/2.0, (-287.0*scale_factor)/2.0, 0.0);
 
-    Rocket {
-        local_model: rocket_model,
-        position: position,
-        velocity: velocity,
-        world_model: Mat4::identity(),
-    }
+    let mut sprite = Sprite::new(texture, mask);
+    sprite.global_scale = Vec3::new(86.0 * scale_factor, 287.0 * scale_factor, 0.0);
+    sprite.local_position = Vec3::new(
+        (-86.0 * scale_factor) / 2.0,
+        (-287.0 * scale_factor) / 2.0,
+        0.0,
+    );
+    sprite.global_position = position;
+
+    Rocket { sprite, velocity }
 }
 
 fn contour_function(x: f32) -> f32 {
@@ -409,12 +303,16 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                 // Add an offset make it look like the rocket is leaving the cannon
                 let position = Vec3::new(x as f32 - 10.0, y - 15.0, 0.0);
 
-                let rad_per_degree = std::f32::consts::PI / 180.0f32;
-                let (sin, cos) = ((player.cannon_angle - 90.0) * rad_per_degree).sin_cos();
+                let (sin, cos) = ((player.cannon_angle - 90.0).to_radians()).sin_cos();
                 let vx = 10.0 * cos;
                 let vy = 10.0 * sin;
                 let velocity = Vec3::new(vx, vy, 0.0);
-                game.game_state.rocket = Some(create_rocket(position, velocity));
+                game.game_state.rocket = Some(create_rocket(
+                    game.rocket_texture.clone(),
+                    player.cannon_sprite.mask(),
+                    position,
+                    velocity,
+                ));
             }
         }
         _ => return false,
@@ -429,32 +327,17 @@ fn update_players(game_state: &mut GameState) {
         let x = player.terrain_position;
         let y = game_state.terrain_contour.get_index(x) + -19.5;
 
-        let model =
-            // Scale to image size
-            Mat4::scale(100.0, 39.0, 1.0)
-            // Local transform to set local origin to image center
-            * Mat4::translation(-50.0, -19.5, 0.0)
-            // Translate to world position
-            * Mat4::translation(x as f32, y, 0.0);
+        player.carriage_sprite.global_position = Vec3::new(x as f32, y, 0.0);
+        player.carriage_sprite.update();
 
-        player.model_matrix = model;
-
-        let model =
-            // Scale to the image size
-            Mat4::scale(20.0, 70.0, 1.0)
-            // Local transform to set local origin to rotation center
-            * Mat4::translation(-10.0, -55.0, 0.0)
-            // Apply rotation
-            * Mat4::rotate_z(player.cannon_angle)
-            // Translate to world position
-            * Mat4::translation(x as f32, y, 0.0);
-
-        player.cannon_matrix = model;
+        player.cannon_sprite.global_rotation = player.cannon_angle;
+        player.cannon_sprite.global_position = Vec3::new(x as f32, y, 0.0);
+        player.cannon_sprite.update()
     }
 }
 
 fn is_rocket_in_bounds(rocket: &Rocket) -> bool {
-    let position = &rocket.position;
+    let position = &rocket.sprite.global_position;
 
     // TODO expose canvas width/height here
     position.x() > 0.0 && position.y() > 0.0 && position.x() < 1024.0 && position.y() < 768.0
@@ -463,19 +346,15 @@ fn is_rocket_in_bounds(rocket: &Rocket) -> bool {
 fn update_rocket(rocket: &mut Rocket, _timestamp: f64) {
     let gravity = Vec3::new(0.0, 0.1, 0.0);
     rocket.velocity += gravity;
-    rocket.position += rocket.velocity;
-
-    // Rotate
-    let degree_per_rad = 180.0f32 / std::f32::consts::PI;
+    rocket.sprite.global_position += rocket.velocity;
 
     // Apply rotation
-    let rocket_angle = 90.0 - degree_per_rad * (-rocket.velocity.y()).atan2(rocket.velocity.x());
-    let model = rocket.local_model
-        * Mat4::rotate_z(rocket_angle)
-        // Translate
-        * Mat4::translation(rocket.position.x(), rocket.position.y(), rocket.position.z());
-
-    rocket.world_model = model;
+    let rocket_angle = 90.0
+        - (-rocket.velocity.y())
+            .atan2(rocket.velocity.x())
+            .to_degrees();
+    rocket.sprite.global_rotation = rocket_angle;
+    rocket.sprite.update();
 }
 
 fn update(game: &mut TankGameFlyweight, timestamp: f64) {
@@ -493,8 +372,6 @@ fn update(game: &mut TankGameFlyweight, timestamp: f64) {
 }
 
 fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
-    // TODO research perf of drawing square using triangle strip versus indexing via element buffer object
-
     gl.clear_color(0.0, 0.0, 0.0, 1.0);
     gl.clear_depth(1.0);
     gl.enable(WebGl2RenderingContext::BLEND);
@@ -502,109 +379,19 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
         WebGl2RenderingContext::SRC_ALPHA,
         WebGl2RenderingContext::ONE_MINUS_SRC_ALPHA,
     );
-    //gl.enable(WebGl2RenderingContext::DEPTH_TEST);
-    //gl.depth_func(WebGl2RenderingContext::LEQUAL);
-    gl.clear(
-        WebGl2RenderingContext::COLOR_BUFFER_BIT, /* | WebGl2RenderingContext::DEPTH_BUFFER_BIT */
-    );
 
-    gl.use_program(Some(&game.program));
+    gl.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
 
-    gl.uniform_matrix4fv_with_f32_array(
-        Some(&game.projection_matrix_uniform),
-        false,
-        game.projection.data(),
-    );
-    gl.uniform_matrix4fv_with_f32_array(
-        Some(&game.model_matrix_uniform),
-        false,
-        game.background_model_matrix.data(),
-    );
-
-    gl.bind_vertex_array(Some(&game.vertex_array_object));
-
-    render_texture_with_mask(
-        gl,
-        &game.background_texture,
-        &game.texture_sampler_uniform,
-        &game.one_mask,
-        &game.mask_sampler_uniform,
-    );
-
-    render_texture_with_mask(
-        gl,
-        &game.foreground_texture,
-        &game.texture_sampler_uniform,
-        &game.foreground_mask_texture,
-        &game.mask_sampler_uniform,
-    );
+    let renderer = &game.sprite_renderer;
+    renderer.render(gl, &game.background_sprite);
+    renderer.render(gl, &game.foreground_sprite);
 
     for player in &game.game_state.players {
-        gl.uniform_matrix4fv_with_f32_array(
-            Some(&game.model_matrix_uniform),
-            false,
-            player.cannon_matrix.data(),
-        );
-        render_texture_with_mask(
-            gl,
-            &game.cannon_texture,
-            &game.texture_sampler_uniform,
-            &player.color_mask,
-            &game.mask_sampler_uniform,
-        );
-
-        gl.uniform_matrix4fv_with_f32_array(
-            Some(&game.model_matrix_uniform),
-            false,
-            player.model_matrix.data(),
-        );
-        render_texture_with_mask(
-            gl,
-            &game.carriage_texture,
-            &game.texture_sampler_uniform,
-            &player.color_mask,
-            &game.mask_sampler_uniform,
-        );
+        renderer.render(gl, &player.cannon_sprite);
+        renderer.render(gl, &player.carriage_sprite);
     }
 
     if let Some(rocket) = &game.game_state.rocket {
-        gl.uniform_matrix4fv_with_f32_array(
-            Some(&game.model_matrix_uniform),
-            false,
-            rocket.world_model.data(),
-        );
-        let player = &game.game_state.players[game.game_state.current_player];
-        render_texture_with_mask(
-            gl,
-            &game.rocket_texture,
-            &game.texture_sampler_uniform,
-            &player.color_mask,
-            &game.mask_sampler_uniform,
-        );
-    }
-
-    gl.bind_vertex_array(None);
-}
-
-// Assumes a shader program with texture sampler 0 and mask sampler 1
-fn render_texture_with_mask(
-    gl: &WebGl2RenderingContext,
-    texture: &WebGlTexture,
-    texture_sampler_uniform: &WebGlUniformLocation,
-    mask: &WebGlTexture,
-    mask_sampler_uniform: &WebGlUniformLocation,
-) {
-    gl.active_texture(WebGl2RenderingContext::TEXTURE0);
-    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(texture));
-    gl.uniform1i(Some(texture_sampler_uniform), 0);
-
-    gl.active_texture(WebGl2RenderingContext::TEXTURE1);
-    gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(mask));
-    gl.uniform1i(Some(mask_sampler_uniform), 1);
-
-    {
-        let offset = 0;
-        let vertex_count = 6;
-        gl.draw_arrays(WebGl2RenderingContext::TRIANGLES, offset, vertex_count);
+        renderer.render(gl, &rocket.sprite);
     }
 }
