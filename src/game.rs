@@ -30,6 +30,7 @@ struct Rocket {
 }
 
 struct GameState {
+    timestamp: f64,
     terrain_contour: js_sys::Float32Array,
     players: [Player; 4],
     current_player: usize,
@@ -69,14 +70,14 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
     let loop_clone = game.clone();
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |t: &JsValue| {
         let mut game = loop_clone.borrow_mut();
-        let timestamp = match t.as_f64() {
-            Some(t) => t,
-            _ => 0.0,
-        };
 
-        update(&mut *game, timestamp);
+        let timestamp = t.as_f64().unwrap();
+        let dt = (timestamp - game.game_state.timestamp) / 1000.0;
 
+        update(&mut *game, dt as f32);
         render(&gl, &game);
+
+        game.game_state.timestamp = timestamp;
 
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut(&JsValue)>));
@@ -218,6 +219,7 @@ fn initialize(
     }
 
     let game_state = GameState {
+        timestamp: 0.0,
         current_player: 0,
         terrain_contour,
         rocket: None,
@@ -304,8 +306,8 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                 let position = Vec3::new(x as f32 - 10.0, y - 15.0, 0.0);
 
                 let (sin, cos) = ((player.cannon_angle - 90.0).to_radians()).sin_cos();
-                let vx = 10.0 * cos;
-                let vy = 10.0 * sin;
+                let vx = 400.0 * cos;
+                let vy = 400.0 * sin;
                 let velocity = Vec3::new(vx, vy, 0.0);
                 game.game_state.rocket = Some(create_rocket(
                     game.rocket_texture.clone(),
@@ -343,10 +345,10 @@ fn is_rocket_in_bounds(rocket: &Rocket) -> bool {
     position.x() > 0.0 && position.y() > 0.0 && position.x() < 1024.0 && position.y() < 768.0
 }
 
-fn update_rocket(rocket: &mut Rocket, _timestamp: f64) {
-    let gravity = Vec3::new(0.0, 0.1, 0.0);
-    rocket.velocity += gravity;
-    rocket.sprite.global_position += rocket.velocity;
+fn update_rocket(rocket: &mut Rocket, dt: f32) {
+    let gravity = Vec3::new(0.0, 150.0, 0.0);
+    rocket.sprite.global_position += rocket.velocity.scaled(dt) + gravity.scaled(0.5*dt*dt);
+    rocket.velocity += gravity.scaled(dt);
 
     // Apply rotation
     let rocket_angle = 90.0
@@ -357,12 +359,12 @@ fn update_rocket(rocket: &mut Rocket, _timestamp: f64) {
     rocket.sprite.update();
 }
 
-fn update(game: &mut TankGameFlyweight, timestamp: f64) {
+fn update(game: &mut TankGameFlyweight, dt: f32) {
     update_players(&mut game.game_state);
 
     if let Some(rocket) = &mut game.game_state.rocket {
         if is_rocket_in_bounds(rocket) {
-            update_rocket(rocket, timestamp);
+            update_rocket(rocket, dt);
         } else {
             game.game_state.rocket = None;
             game.game_state.current_player =

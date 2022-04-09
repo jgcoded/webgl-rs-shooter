@@ -21,6 +21,12 @@ impl Vec3 {
     pub fn z(&self) -> f32 {
         self.data[2]
     }
+
+    pub fn scaled(&self, u: f32) -> Vec3 {
+        Vec3 {
+            data: [u * self.data[0], u * self.data[1], u * self.data[2]],
+        }
+    }
 }
 
 impl Add for Vec3 {
