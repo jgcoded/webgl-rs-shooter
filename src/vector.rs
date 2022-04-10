@@ -1,4 +1,6 @@
-use std::ops::{Add, AddAssign, Sub};
+use std::{
+    ops::{Add, AddAssign, Sub},
+};
 
 #[derive(Debug)]
 pub struct Vec3 {
@@ -26,6 +28,11 @@ impl Vec3 {
         Vec3 {
             data: [u * self.data[0], u * self.data[1], u * self.data[2]],
         }
+    }
+
+    pub fn length(&self) -> f32 {
+        (self.data[0] * self.data[0] + self.data[1] * self.data[1] + self.data[2] * self.data[2])
+            .sqrt()
     }
 }
 

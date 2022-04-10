@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::dom::window;
 use crate::shader_cache::ShaderCache;
+use crate::shapes::{Circle, Collides, Rectangle, Shape};
 use crate::sprite::Sprite;
 use crate::sprite_renderer::SpriteRenderer;
 use crate::texture::{
@@ -18,6 +19,7 @@ use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{console, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext, WebGlTexture};
 
 struct Player {
+    id: usize,
     terrain_position: u32,
     carriage_sprite: Sprite,
     cannon_sprite: Sprite,
@@ -25,6 +27,7 @@ struct Player {
 }
 
 struct Rocket {
+    player_id: usize,
     sprite: Sprite,
     velocity: Vec3,
 }
@@ -43,6 +46,7 @@ struct TankGameFlyweight {
     game_state: GameState,
     sprite_renderer: SpriteRenderer,
     rocket_texture: Rc<WebGlTexture>,
+    render_shapes: bool,
 }
 
 #[wasm_bindgen]
@@ -186,24 +190,28 @@ fn initialize(
 
     let mut players = [
         Player {
+            id: 0,
             terrain_position: player_positions[0],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), red_mask.clone()),
             carriage_sprite: Sprite::new(carriage_texture.clone(), red_mask.clone()),
         },
         Player {
+            id: 1,
             terrain_position: player_positions[1],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), green_mask.clone()),
             carriage_sprite: Sprite::new(carriage_texture.clone(), green_mask.clone()),
         },
         Player {
+            id: 2,
             terrain_position: player_positions[2],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), blue_mask.clone()),
             carriage_sprite: Sprite::new(carriage_texture.clone(), blue_mask.clone()),
         },
         Player {
+            id: 3,
             terrain_position: player_positions[3],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), purple_mask.clone()),
@@ -237,6 +245,7 @@ fn initialize(
         game_state,
         sprite_renderer,
         rocket_texture,
+        render_shapes: false,
     })
 }
 
@@ -245,7 +254,8 @@ fn create_rocket(
     mask: Rc<WebGlTexture>,
     cannon_angle: f32,
     cannon_x: f32,
-    cannon_y: f32
+    cannon_y: f32,
+    player_id: usize,
 ) -> Rocket {
     // Add an offset make it look like the rocket is leaving the cannon
     let position = Vec3::new(cannon_x as f32 - 10.0, cannon_y - 15.0, 0.0);
@@ -266,7 +276,11 @@ fn create_rocket(
     );
     sprite.global_position = position;
 
-    Rocket { sprite, velocity }
+    Rocket {
+        player_id,
+        sprite,
+        velocity,
+    }
 }
 
 fn contour_function(x: f32) -> f32 {
@@ -320,7 +334,9 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                     game.rocket_texture.clone(),
                     player.cannon_sprite.mask(),
                     player.cannon_angle,
-                    x as f32, y
+                    x as f32,
+                    y,
+                    player.id,
                 ));
             }
         }
@@ -359,18 +375,80 @@ fn update_rocket(rocket: &mut Rocket, dt: f32) {
     rocket.sprite.update();
 }
 
+fn rocket_to_shape(rocket: &Rocket) -> Shape {
+    // Use a square shape at the center
+    let size = Vec3::new(
+        rocket.sprite.global_scale.x() / 2.0,
+        rocket.sprite.global_scale.x() / 2.0,
+        0.0,
+    );
+    Shape::Rectangle(Rectangle {
+        top_left: rocket.sprite.global_position - size,
+        width: 2.0 * size.x(),
+        height: 2.0 * size.y(),
+    })
+}
+
+fn player_to_shape(player: &Player) -> Shape {
+    let radius = player.carriage_sprite.global_scale.y() / 2.0;
+    Shape::Circle(Circle {
+        center: player.carriage_sprite.global_position,
+        radius,
+    })
+}
+
+fn rocket_collided(rocket: &Rocket, players: &[Player]) -> bool {
+    let tip = rocket_to_shape(rocket);
+
+    for player in players {
+        if player.id == rocket.player_id {
+            continue;
+        }
+
+        let player_shape = player_to_shape(player);
+        if tip.intersects(&player_shape) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn update(game: &mut TankGameFlyweight, dt: f32) {
     update_players(&mut game.game_state);
 
     if let Some(rocket) = &mut game.game_state.rocket {
-        if is_rocket_in_bounds(rocket) {
-            update_rocket(rocket, dt);
-        } else {
+        update_rocket(rocket, dt);
+
+        if !is_rocket_in_bounds(rocket) || rocket_collided(rocket, &game.game_state.players) {
             game.game_state.rocket = None;
             game.game_state.current_player =
                 (game.game_state.current_player + 1) % game.game_state.players.len();
         }
     }
+}
+
+fn render_shape(
+    gl: &WebGl2RenderingContext,
+    shape: &Shape,
+    texture: Rc<WebGlTexture>,
+    game: &TankGameFlyweight,
+) {
+    let mut sprite = Sprite::new(texture, game.background_sprite.mask());
+    match shape {
+        Shape::Rectangle(rectangle) => {
+            sprite.global_position = rectangle.top_left;
+            sprite.global_scale = Vec3::new(rectangle.width, rectangle.height, 1.0);
+        }
+        Shape::Circle(circle) => {
+            sprite.global_position = circle.center;
+            sprite.local_position = Vec3::new(-circle.radius, -circle.radius, 1.0);
+            sprite.global_scale = Vec3::new(circle.radius * 2.0, circle.radius * 2.0, 1.0);
+        }
+    }
+
+    sprite.update();
+    game.sprite_renderer.render(gl, &sprite);
 }
 
 fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
@@ -391,9 +469,19 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
     for player in &game.game_state.players {
         renderer.render(gl, &player.cannon_sprite);
         renderer.render(gl, &player.carriage_sprite);
+
+        // render shapes used in collision detection
+        if game.render_shapes {
+            let shape = player_to_shape(player);
+            render_shape(gl, &shape, player.carriage_sprite.mask(), game);
+        }
     }
 
     if let Some(rocket) = &game.game_state.rocket {
         renderer.render(gl, &rocket.sprite);
+        if game.render_shapes {
+            let shape = rocket_to_shape(rocket);
+            render_shape(gl, &shape, rocket.sprite.mask(), game);
+        }
     }
 }

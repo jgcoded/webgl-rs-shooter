@@ -8,6 +8,7 @@ mod sprite;
 mod shader_cache;
 mod sprite_shader;
 mod sprite_renderer;
+mod shapes;
 
 pub mod game;
 
