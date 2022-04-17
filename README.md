@@ -44,6 +44,10 @@ https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code#handle_keybo
 
 https://learnopengl.com/In-Practice/2D-Game/Rendering-Sprites
 
+https://github.com/WebGLSamples/WebGL2Samples
+
+https://gameprogrammingpatterns.com/contents.html
+
 ## Potential game art
 
 https://opengameart.org/content/animated-tank

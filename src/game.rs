@@ -15,11 +15,13 @@ use crate::vector::Vec3;
 use super::dom::{get_canvas, get_rendering_context, request_animation_frame, set_panic_hook};
 use super::matrix::Mat4;
 
+use js_sys::Float32Array;
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{console, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext, WebGlTexture};
 
 struct Player {
     id: usize,
+    is_alive: bool,
     terrain_position: u32,
     carriage_sprite: Sprite,
     cannon_sprite: Sprite,
@@ -191,6 +193,7 @@ fn initialize(
     let mut players = [
         Player {
             id: 0,
+            is_alive: true,
             terrain_position: player_positions[0],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), red_mask.clone()),
@@ -198,6 +201,7 @@ fn initialize(
         },
         Player {
             id: 1,
+            is_alive: true,
             terrain_position: player_positions[1],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), green_mask.clone()),
@@ -205,6 +209,7 @@ fn initialize(
         },
         Player {
             id: 2,
+            is_alive: true,
             terrain_position: player_positions[2],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), blue_mask.clone()),
@@ -212,6 +217,7 @@ fn initialize(
         },
         Player {
             id: 3,
+            is_alive: true,
             terrain_position: player_positions[3],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), purple_mask.clone()),
@@ -229,6 +235,8 @@ fn initialize(
         player.cannon_sprite.global_scale = Vec3::new(20.0, 70.0, 1.0);
         player.cannon_sprite.local_position = Vec3::new(-10.0, -55.0, 0.0);
         player.cannon_sprite.global_position = Vec3::new(x as f32, y, 0.0);
+        player.cannon_sprite.global_rotation = player.cannon_angle;
+        player.cannon_sprite.update();
     }
 
     let game_state = GameState {
@@ -349,8 +357,10 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
 
 fn update_players(game_state: &mut GameState) {
     for player in &mut game_state.players {
-        player.cannon_sprite.global_rotation = player.cannon_angle;
-        player.cannon_sprite.update()
+        if player.is_alive && game_state.current_player == player.id {
+            player.cannon_sprite.global_rotation = player.cannon_angle;
+            player.cannon_sprite.update()
+        }
     }
 }
 
@@ -397,21 +407,38 @@ fn player_to_shape(player: &Player) -> Shape {
     })
 }
 
-fn rocket_collided(rocket: &Rocket, players: &[Player]) -> bool {
+fn rocket_collided(rocket: &Rocket, players: &[Player]) -> Option<usize> {
     let tip = rocket_to_shape(rocket);
 
     for player in players {
-        if player.id == rocket.player_id {
+        if !player.is_alive || player.id == rocket.player_id {
             continue;
         }
 
         let player_shape = player_to_shape(player);
         if tip.intersects(&player_shape) {
-            return true;
+            return Some(player.id);
         }
     }
 
-    false
+    None
+}
+
+fn rocket_hit_terrain(rocket:& Rocket, terrain_contour: &Float32Array) -> bool {
+    let x = rocket.sprite.global_position.x();
+    let y = terrain_contour.get_index(x as u32);
+    rocket.sprite.global_position.y() > y
+}
+
+fn next_turn(state: &mut GameState) {
+    loop {
+        state.current_player =
+            (state.current_player + 1) % state.players.len();
+
+        if state.players[state.current_player].is_alive {
+            break;
+        }
+    }
 }
 
 fn update(game: &mut TankGameFlyweight, dt: f32) {
@@ -419,11 +446,16 @@ fn update(game: &mut TankGameFlyweight, dt: f32) {
 
     if let Some(rocket) = &mut game.game_state.rocket {
         update_rocket(rocket, dt);
-
-        if !is_rocket_in_bounds(rocket) || rocket_collided(rocket, &game.game_state.players) {
+        if !is_rocket_in_bounds(rocket) {
             game.game_state.rocket = None;
-            game.game_state.current_player =
-                (game.game_state.current_player + 1) % game.game_state.players.len();
+            next_turn(&mut game.game_state);
+        } else if let Some(player) = rocket_collided(rocket, &game.game_state.players) {
+            game.game_state.players[player].is_alive = false;
+            game.game_state.rocket = None;
+            next_turn(&mut game.game_state);
+        } else if rocket_hit_terrain(rocket, &game.game_state.terrain_contour) {
+            game.game_state.rocket = None;
+            next_turn(&mut game.game_state)
         }
     }
 }
@@ -467,6 +499,10 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
     renderer.render(gl, &game.foreground_sprite);
 
     for player in &game.game_state.players {
+        if !player.is_alive {
+            continue;
+        }
+
         renderer.render(gl, &player.cannon_sprite);
         renderer.render(gl, &player.carriage_sprite);
 
