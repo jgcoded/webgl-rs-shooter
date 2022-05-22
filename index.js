@@ -10,7 +10,7 @@ window.addEventListener('message', function (message) {
 
     let state = message.data;
 
-    if (state.current_player) {
+    if (state.current_player != null) {
         document.getElementById('player').innerText = (state.current_player + 1) + "";
     }
 
