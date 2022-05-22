@@ -303,7 +303,7 @@ fn create_rocket(
 fn contour_function(x: f32, max_y: f32, a: f32, b: f32, c: f32) -> f32 {
     let peak_height = 100.0;
     let flatness = 70.0;
-    let offset = max_y / 2.0;
+    let offset = max_y / 1.33;
 
     peak_height / a * (x / flatness * a + a).sin()
         + peak_height / b * (x / flatness * b + b).sin()
