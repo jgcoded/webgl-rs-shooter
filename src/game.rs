@@ -10,6 +10,7 @@ use crate::texture::{
     create_rgba_texture_from_array_buffer_view, create_rgba_texture_from_u8_array,
     load_image_as_texture,
 };
+use crate::ui::{post_ui_state, Ui};
 use crate::vector::Vec3;
 
 use super::dom::{get_canvas, get_rendering_context, request_animation_frame, set_panic_hook};
@@ -26,6 +27,7 @@ struct Player {
     carriage_sprite: Sprite,
     cannon_sprite: Sprite,
     cannon_angle: f32,
+    cannon_power: u32,
 }
 
 struct Rocket {
@@ -198,6 +200,7 @@ fn initialize(
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), red_mask.clone()),
             carriage_sprite: Sprite::new(carriage_texture.clone(), red_mask.clone()),
+            cannon_power: 200,
         },
         Player {
             id: 1,
@@ -206,6 +209,7 @@ fn initialize(
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), green_mask.clone()),
             carriage_sprite: Sprite::new(carriage_texture.clone(), green_mask.clone()),
+            cannon_power: 200,
         },
         Player {
             id: 2,
@@ -214,6 +218,7 @@ fn initialize(
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), blue_mask.clone()),
             carriage_sprite: Sprite::new(carriage_texture.clone(), blue_mask.clone()),
+            cannon_power: 200,
         },
         Player {
             id: 3,
@@ -222,6 +227,7 @@ fn initialize(
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new(cannon_texture.clone(), purple_mask.clone()),
             carriage_sprite: Sprite::new(carriage_texture.clone(), purple_mask.clone()),
+            cannon_power: 200,
         },
     ];
 
@@ -247,6 +253,8 @@ fn initialize(
         players,
     };
 
+    update_ui(&game_state);
+
     Ok(TankGameFlyweight {
         foreground_sprite,
         background_sprite,
@@ -261,6 +269,7 @@ fn create_rocket(
     texture: Rc<WebGlTexture>,
     mask: Rc<WebGlTexture>,
     cannon_angle: f32,
+    cannon_power: f32,
     cannon_x: f32,
     cannon_y: f32,
     player_id: usize,
@@ -268,7 +277,7 @@ fn create_rocket(
     // Add an offset make it look like the rocket is leaving the cannon
     let position = Vec3::new(cannon_x as f32 - 10.0, cannon_y - 15.0, 0.0);
 
-    let power = 400.0;
+    let power = cannon_power;
     let (sin, cos) = ((cannon_angle - 90.0).to_radians()).sin_cos();
     let vx = power * cos;
     let vy = power * sin;
@@ -296,10 +305,10 @@ fn contour_function(x: f32, max_y: f32, a: f32, b: f32, c: f32) -> f32 {
     let flatness = 70.0;
     let offset = max_y / 2.0;
 
-    peak_height / a * (x/flatness*a + a).sin() +
-    peak_height / b * (x/flatness*b + b).sin() +
-    peak_height / c * (x/flatness*c + c).sin() +
-    offset
+    peak_height / a * (x / flatness * a + a).sin()
+        + peak_height / b * (x / flatness * b + b).sin()
+        + peak_height / c * (x / flatness * c + c).sin()
+        + offset
 }
 
 fn generate_terrain_contour(contour: &mut js_sys::Float32Array, max_height: f32) {
@@ -345,6 +354,14 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
     match key_code {
         "ArrowLeft" => player.cannon_angle -= 2.0,
         "ArrowRight" => player.cannon_angle += 2.0,
+        "ArrowUp" => {
+            player.cannon_power += 5;
+            update_ui(&game.game_state);
+        }
+        "ArrowDown" => {
+            player.cannon_power -= 5;
+            update_ui(&game.game_state);
+        }
         " " => {
             if game.game_state.rocket.is_none() {
                 let x = player.terrain_position;
@@ -354,6 +371,7 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                     game.rocket_texture.clone(),
                     player.cannon_sprite.mask(),
                     player.cannon_angle,
+                    player.cannon_power as f32,
                     x as f32,
                     y,
                     player.id,
@@ -436,21 +454,38 @@ fn rocket_collided(rocket: &Rocket, players: &[Player]) -> Option<usize> {
     None
 }
 
-fn rocket_hit_terrain(rocket:& Rocket, terrain_contour: &Float32Array) -> bool {
+fn rocket_hit_terrain(rocket: &Rocket, terrain_contour: &Float32Array) -> bool {
     let x = rocket.sprite.global_position.x();
     let y = terrain_contour.get_index(x as u32);
     rocket.sprite.global_position.y() > y
 }
 
+fn update_ui(state: &GameState) {
+    let current_player = &state.players[state.current_player];
+    post_ui_state(&Ui {
+        cannon_power: Some(current_player.cannon_power),
+        current_player: Some(current_player.id),
+        player_color: Some(String::from(match current_player.id {
+            0 => "red",
+            1 => "green",
+            2 => "blue",
+            3 => "purple",
+            _ => "yelow",
+        })),
+    })
+    .expect("Could not post UI state");
+}
+
 fn next_turn(state: &mut GameState) {
     loop {
-        state.current_player =
-            (state.current_player + 1) % state.players.len();
+        state.current_player = (state.current_player + 1) % state.players.len();
 
         if state.players[state.current_player].is_alive {
             break;
         }
     }
+
+    update_ui(state);
 }
 
 fn update(game: &mut TankGameFlyweight, dt: f32) {

@@ -4,3 +4,21 @@ import './site.css';
 import { start_game } from './pkg';
 
 start_game('canvas');
+
+window.addEventListener('message', function (message) {
+    //console.log('Received message from game: ', message.data);
+
+    let state = message.data;
+
+    if (state.current_player) {
+        document.getElementById('player').innerText = (state.current_player + 1) + "";
+    }
+
+    if (state.player_color) {
+        document.getElementById('turn').style = `color: ${state.player_color}`;
+    }
+
+    if (state.cannon_power) {
+        document.getElementById('power').innerText = `${state.cannon_power}`;
+    }
+});

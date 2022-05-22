@@ -61,3 +61,8 @@ pub fn request_animation_frame(f: &Closure<dyn FnMut(&JsValue)>) {
         .request_animation_frame(f.as_ref().unchecked_ref())
         .expect("should register `requestAnimationFrame` OK");
 }
+
+pub fn post_message(message: &JsValue) -> Result<(), JsValue> {
+    window()
+        .post_message(message, "*")
+}

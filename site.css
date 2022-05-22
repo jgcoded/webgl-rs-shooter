@@ -1,31 +1,23 @@
 
 body {
+  background-color: black;
   display: flex;
-  flex-direction: column;
-  margin: 3em;
+  justify-content: center;
 }
 
 h1, h2 {
-  color: #474747;
-}
-
-a {
-  text-decoration: none;
-}
-
-h2 {
-  margin-bottom: 0;
-}
-
-.separator {
-  width: 100%;
-  min-width: initial;
-  height: 5px;
-  border-top: 1px black solid;
-  margin-bottom: 1em;
+  color: white;
+  font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+  -webkit-text-stroke-width: 0.5pt;
+  -webkit-text-stroke-color: black;
 }
 
 canvas {
   width: 1024px;
   height: 768px;
+}
+
+.ui-container {
+  position: absolute;
+  margin-left: 16px;
 }
