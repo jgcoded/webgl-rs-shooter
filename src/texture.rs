@@ -6,8 +6,8 @@ use web_sys::{HtmlImageElement, WebGl2RenderingContext, WebGlTexture};
 
 pub fn create_rgba_texture_from_array_buffer_view(
     gl: &WebGl2RenderingContext,
-    width: i32,
-    height: i32,
+    width: u32,
+    height: u32,
     src_data: &js_sys::Uint8Array,
 ) -> Result<Rc<WebGlTexture>, JsValue> {
     let texture = gl
@@ -27,8 +27,8 @@ pub fn create_rgba_texture_from_array_buffer_view(
         WebGl2RenderingContext::TEXTURE_2D,
         level,
         internal_format,
-        width,
-        height,
+        width as i32,
+        height as i32,
         border,
         src_format,
         src_type,
@@ -50,8 +50,8 @@ pub fn create_rgba_texture_from_array_buffer_view(
 
 pub fn create_rgba_texture_from_u8_array(
     gl: &WebGl2RenderingContext,
-    width: i32,
-    height: i32,
+    width: u32,
+    height: u32,
     src_data: &[u8],
 ) -> Result<Rc<WebGlTexture>, JsValue> {
     let texture = gl
@@ -71,8 +71,8 @@ pub fn create_rgba_texture_from_u8_array(
         WebGl2RenderingContext::TEXTURE_2D,
         level,
         internal_format,
-        width,
-        height,
+        width as i32,
+        height as i32,
         border,
         src_format,
         src_type,

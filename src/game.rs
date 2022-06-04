@@ -51,6 +51,8 @@ struct TankGameFlyweight {
     sprite_renderer: SpriteRenderer,
     rocket_texture: Rc<WebGlTexture>,
     render_shapes: bool,
+    client_width: u32,
+    client_height: u32
 }
 
 #[wasm_bindgen]
@@ -102,6 +104,9 @@ fn initialize(
     set_panic_hook();
     console::log_1(&"Initializing tank game".into());
 
+    let client_width = canvas.client_width() as u32;
+    let client_height = canvas.client_height() as u32;
+
     let background_texture = load_image_as_texture(&gl, "assets/background.jpg")?;
     let foreground_texture = load_image_as_texture(&gl, "assets/ground.jpg")?;
     let carriage_texture = load_image_as_texture(&gl, "assets/carriage.png")?;
@@ -111,14 +116,14 @@ fn initialize(
     let sprite_shader = Rc::new(SpriteShader::new(gl)?);
     let sprite_renderer = SpriteRenderer::new(gl, sprite_shader.clone())?;
 
-    let mut terrain_contour = js_sys::Float32Array::new_with_length(canvas.client_width() as u32);
-    generate_terrain_contour(&mut terrain_contour, canvas.client_height() as f32);
+    let mut terrain_contour = js_sys::Float32Array::new_with_length(client_width as u32);
+    generate_terrain_contour(&mut terrain_contour, client_height as f32);
 
     let player_positions = [
-        (0.15f32 * canvas.client_width() as f32) as u32,
-        (0.3f32 * canvas.client_width() as f32) as u32,
-        (0.5f32 * canvas.client_width() as f32) as u32,
-        (0.75f32 * canvas.client_width() as f32) as u32,
+        (0.15f32 * client_width as f32) as u32,
+        (0.3f32 * client_width as f32) as u32,
+        (0.5f32 * client_width as f32) as u32,
+        (0.75f32 * client_width as f32) as u32,
     ];
 
     let player_colors = [
@@ -131,50 +136,50 @@ fn initialize(
     // Flatten the terrain under the player positions
     for position in player_positions {
         let start = (position - 50).max(0);
-        let end = (position + 50).min(canvas.client_width() as u32);
+        let end = (position + 50).min(client_width as u32);
         let height = terrain_contour.get_index(start);
         for i in start..end {
             terrain_contour.set_index(i, height);
         }
     }
 
-    let buffer_size = (canvas.client_width() * canvas.client_height() * 4) as u32;
+    let buffer_size = (client_width * client_height * 4) as u32;
     let mut foreground_mask_buffer = js_sys::Uint8Array::new_with_length(buffer_size);
 
     generate_foreground_mask_buffer(
         &mut foreground_mask_buffer,
         &terrain_contour,
-        canvas.client_width() as u32,
-        canvas.client_height() as u32,
+        client_width,
+        client_height
     );
 
     let foreground_mask_texture = create_rgba_texture_from_array_buffer_view(
         gl,
-        canvas.client_width(),
-        canvas.client_height(),
+        client_width,
+        client_height,
         &mut foreground_mask_buffer,
     )?;
 
     let mut foreground_sprite = Sprite::new_with_mask(foreground_texture, foreground_mask_texture)?;
     foreground_sprite.global_scale = Vec3::new(
-        canvas.client_width() as f32,
-        canvas.client_height() as f32,
+        client_width as f32,
+        client_height as f32,
         1.0,
     );
     foreground_sprite.update();
 
     let mut background_sprite = Sprite::new(gl, background_texture)?;
     background_sprite.global_scale = Vec3::new(
-        canvas.client_width() as f32,
-        canvas.client_height() as f32,
+        client_width as f32,
+        client_height as f32,
         1.0,
     );
     background_sprite.update();
 
     let projection = Mat4::orthographic(
         0.0,
-        canvas.client_width() as f32,
-        canvas.client_height() as f32,
+        client_width as f32,
+        client_height as f32,
         0.0,
         -1.0,
         1.0,
@@ -258,6 +263,8 @@ fn initialize(
         sprite_renderer,
         rocket_texture,
         render_shapes: false,
+        client_width,
+        client_height
     })
 }
 
@@ -393,11 +400,10 @@ fn update_players(game_state: &mut GameState) {
     }
 }
 
-fn is_rocket_in_bounds(rocket: &Rocket) -> bool {
+fn is_rocket_in_bounds(rocket: &Rocket, canvas_width: u32, canvas_height: u32) -> bool {
     let position = &rocket.sprite.global_position;
 
-    // TODO expose canvas width/height here
-    position.x() > 0.0 && position.y() > 0.0 && position.x() < 1024.0 && position.y() < 768.0
+    position.x() > 0.0 && position.y() > 0.0 && position.x() < canvas_width as f32 && position.y() < canvas_height as f32
 }
 
 fn update_rocket(rocket: &mut Rocket, dt: f32) {
@@ -492,7 +498,7 @@ fn update(game: &mut TankGameFlyweight, dt: f32) {
 
     if let Some(rocket) = &mut game.game_state.rocket {
         update_rocket(rocket, dt);
-        if !is_rocket_in_bounds(rocket) {
+        if !is_rocket_in_bounds(rocket, game.client_width, game.client_height) {
             game.game_state.rocket = None;
             next_turn(&mut game.game_state);
         } else if let Some(player) = rocket_collided(rocket, &game.game_state.players) {
