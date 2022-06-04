@@ -71,6 +71,10 @@ impl Sprite {
         self.mask.clone()
     }
 
+    pub fn set_mask(&mut self, mask: Rc<WebGlTexture>) {
+        self.mask = mask;
+    }
+
     pub fn model(&self) -> &Mat4 {
         &self.model
     }

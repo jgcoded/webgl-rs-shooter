@@ -6,7 +6,7 @@ use crate::shapes::{Circle, Collides, Rectangle, Shape};
 use crate::sprite::Sprite;
 use crate::sprite_renderer::SpriteRenderer;
 use crate::sprite_shader::SpriteShader;
-use crate::terrain::{generate_terrain_contour, new_terrain_sprite};
+use crate::terrain::{generate_terrain_contour, new_terrain_sprite, generate_terrain_mask};
 use crate::texture::load_image_as_texture;
 use crate::ui::{post_ui_state, Ui};
 use crate::vector::Vec3;
@@ -40,6 +40,9 @@ struct GameState {
     players: [Player; 4],
     current_player: usize,
     rocket: Option<Rocket>,
+    terrain_dirty: bool,
+    client_width: u32,
+    client_height: u32
 }
 
 struct TankGameFlyweight {
@@ -49,9 +52,7 @@ struct TankGameFlyweight {
     game_state: GameState,
     sprite_renderer: SpriteRenderer,
     rocket_texture: Rc<WebGlTexture>,
-    render_shapes: bool,
-    client_width: u32,
-    client_height: u32
+    render_shapes: bool
 }
 
 #[wasm_bindgen]
@@ -84,6 +85,7 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
         let dt = (timestamp - game.game_state.timestamp) / 1000.0;
 
         update(&mut *game, dt as f32);
+        prepare_dirty_resources(&gl, &mut *game);
         render(&gl, &game);
 
         game.game_state.timestamp = timestamp;
@@ -219,17 +221,7 @@ fn initialize(
     ];
 
     for player in &mut players {
-        let x = player.terrain_position;
-        let y = terrain_contour.get_index(x) + -19.5;
-        player.carriage_sprite.global_scale = Vec3::new(100.0, 39.0, 1.0);
-        player.carriage_sprite.local_position = Vec3::new(-50.0, -19.5, 0.0);
-        player.carriage_sprite.global_position = Vec3::new(x as f32, y, 0.0);
-        player.carriage_sprite.update();
-        player.cannon_sprite.global_scale = Vec3::new(20.0, 70.0, 1.0);
-        player.cannon_sprite.local_position = Vec3::new(-10.0, -55.0, 0.0);
-        player.cannon_sprite.global_position = Vec3::new(x as f32, y, 0.0);
-        player.cannon_sprite.global_rotation = player.cannon_angle;
-        player.cannon_sprite.update();
+        reposition_player(player, &terrain_contour);
     }
 
     let game_state = GameState {
@@ -238,6 +230,9 @@ fn initialize(
         terrain_contour,
         rocket: None,
         players,
+        terrain_dirty: false,
+        client_width,
+        client_height
     };
 
     update_ui(&game_state);
@@ -249,10 +244,22 @@ fn initialize(
         game_state,
         sprite_renderer,
         rocket_texture,
-        render_shapes: false,
-        client_width,
-        client_height
+        render_shapes: false
     })
+}
+
+fn reposition_player(player: &mut Player, terrain_contour: &Float32Array) {
+    let x = player.terrain_position;
+    let y = terrain_contour.get_index(x) + -19.5;
+    player.carriage_sprite.global_scale = Vec3::new(100.0, 39.0, 1.0);
+    player.carriage_sprite.local_position = Vec3::new(-50.0, -19.5, 0.0);
+    player.carriage_sprite.global_position = Vec3::new(x as f32, y, 0.0);
+    player.carriage_sprite.update();
+    player.cannon_sprite.global_scale = Vec3::new(20.0, 70.0, 1.0);
+    player.cannon_sprite.local_position = Vec3::new(-10.0, -55.0, 0.0);
+    player.cannon_sprite.global_position = Vec3::new(x as f32, y, 0.0);
+    player.cannon_sprite.global_rotation = player.cannon_angle;
+    player.cannon_sprite.update();
 }
 
 
@@ -339,6 +346,16 @@ fn update_players(game_state: &mut GameState) {
             player.cannon_sprite.global_rotation = player.cannon_angle;
             player.cannon_sprite.update()
         }
+
+        let position_y = player.carriage_sprite.global_position.y() + player.carriage_sprite.global_scale.y();
+        let terrain_height = game_state.terrain_contour.get_index(player.terrain_position);
+
+        if position_y >= game_state.client_height as f32 {
+            player.is_alive = false;
+        } else if terrain_height > position_y {
+            reposition_player(player, &game_state.terrain_contour);
+        }
+
     }
 }
 
@@ -424,7 +441,7 @@ fn update_ui(state: &GameState) {
 }
 
 fn next_turn(state: &mut GameState) {
-    loop {
+    for _ in 0..state.players.len() {
         state.current_player = (state.current_player + 1) % state.players.len();
 
         if state.players[state.current_player].is_alive {
@@ -435,22 +452,71 @@ fn next_turn(state: &mut GameState) {
     update_ui(state);
 }
 
+fn add_crater_to_terrain(terrain_contour: &mut Float32Array, crater_center_x: f32, crater_radius: f32) {
+
+    let crater_start = (crater_center_x - crater_radius).floor() as u32 + 1;
+    let crater_end = (crater_center_x + crater_radius).ceil() as u32 - 1;
+    let crater_center_y = terrain_contour.get_index(crater_center_x as u32);
+
+    for x in crater_start..crater_end {
+        let dx = (crater_center_x - x as f32).abs();
+        let dy = (crater_radius*crater_radius - dx*dx).sqrt();
+
+        let current_terrain_height = terrain_contour.get_index(x);
+        let new_height = crater_center_y + dy;
+
+        if current_terrain_height < new_height {
+            terrain_contour.set_index(x, new_height);
+        }
+    }
+}
+
 fn update(game: &mut TankGameFlyweight, dt: f32) {
-    update_players(&mut game.game_state);
 
     if let Some(rocket) = &mut game.game_state.rocket {
         update_rocket(rocket, dt);
-        if !is_rocket_in_bounds(rocket, game.client_width, game.client_height) {
+        if !is_rocket_in_bounds(rocket, game.game_state.client_width, game.game_state.client_height) {
             game.game_state.rocket = None;
             next_turn(&mut game.game_state);
         } else if let Some(player) = rocket_collided(rocket, &game.game_state.players) {
+
+            add_crater_to_terrain(&mut game.game_state.terrain_contour, game.game_state.players[player].carriage_sprite.global_position.x(), 40.0f32);
+            game.game_state.terrain_dirty = true;
+
             game.game_state.players[player].is_alive = false;
             game.game_state.rocket = None;
             next_turn(&mut game.game_state);
         } else if rocket_hit_terrain(rocket, &game.game_state.terrain_contour) {
+
+            add_crater_to_terrain(&mut game.game_state.terrain_contour, rocket.sprite.global_position.x(), 40.0f32);
+            game.game_state.terrain_dirty = true;
             game.game_state.rocket = None;
             next_turn(&mut game.game_state)
         }
+    }
+
+    update_players(&mut game.game_state);
+
+    if !game.game_state.players[game.game_state.current_player].is_alive {
+        next_turn(&mut game.game_state);
+    }
+}
+
+fn prepare_dirty_resources(gl: &WebGl2RenderingContext, game: &mut TankGameFlyweight) {
+    if game.game_state.terrain_dirty {
+        let old_mask = game.foreground_sprite.mask().clone();
+
+        let new_mask = generate_terrain_mask(
+            gl,
+            &mut game.foreground_mask_buffer,
+            &game.game_state.terrain_contour,
+            game.game_state.client_width,
+            game.game_state.client_height
+        ).expect("Could not create terrain mask");
+
+        game.foreground_sprite.set_mask(new_mask.clone());
+        gl.delete_texture(Some(&old_mask));
+        game.game_state.terrain_dirty = false;
     }
 }
 
@@ -515,3 +581,4 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
         }
     }
 }
+

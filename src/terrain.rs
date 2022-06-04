@@ -56,17 +56,6 @@ pub fn generate_terrain_mask(
     )
 }
 
-fn contour_function(x: f32, max_y: f32, a: f32, b: f32, c: f32) -> f32 {
-    let peak_height = 100.0;
-    let flatness = 70.0;
-    let offset = max_y / 1.33;
-
-    peak_height / a * (x / flatness * a + a).sin()
-        + peak_height / b * (x / flatness * b + b).sin()
-        + peak_height / c * (x / flatness * c + c).sin()
-        + offset
-}
-
 pub fn generate_terrain_contour(contour: &mut js_sys::Float32Array, max_height: f32) {
     let a = rand::random::<f32>() + 1.0;
     let b = rand::random::<f32>() + 2.0;
@@ -76,6 +65,17 @@ pub fn generate_terrain_contour(contour: &mut js_sys::Float32Array, max_height: 
         let height = contour_function(i as f32, max_height, a, b, c);
         contour.set_index(i, height)
     }
+}
+
+fn contour_function(x: f32, max_y: f32, a: f32, b: f32, c: f32) -> f32 {
+    let peak_height = 100.0;
+    let flatness = 70.0;
+    let offset = max_y / 1.33;
+
+    peak_height / a * (x / flatness * a + a).sin()
+        + peak_height / b * (x / flatness * b + b).sin()
+        + peak_height / c * (x / flatness * c + c).sin()
+        + offset
 }
 
 fn generate_foreground_mask_buffer(
