@@ -38,7 +38,7 @@ impl SpriteShader {
 
         uniform sampler2D uTextureSampler;
         uniform sampler2D uMaskSampler;
-        uniform sampler2D uColor;
+        uniform vec4 uColor;
 
         void main(void) {
             vec4 texture = texture2D(uTextureSampler, vTextureCoord);

@@ -125,7 +125,7 @@ fn initialize(
         [1.0, 0.0, 0.0, 1.0],
         [0.0, 1.0, 0.0, 1.0],
         [0.0, 0.0, 1.0, 1.0],
-        [1.0, 1.0, 0.0, 1.0]
+        [1.0, 0.0, 1.0, 1.0]
     ];
 
     // Flatten the terrain under the player positions
@@ -264,12 +264,13 @@ fn initialize(
 fn create_rocket(
     texture: Rc<WebGlTexture>,
     mask: Rc<WebGlTexture>,
+    color: [f32; 4],
     cannon_angle: f32,
     cannon_power: f32,
     cannon_x: f32,
     cannon_y: f32,
     player_id: usize,
-) -> Rocket {
+) -> Result<Rocket, JsValue> {
     // Add an offset make it look like the rocket is leaving the cannon
     let position = Vec3::new(cannon_x as f32 - 10.0, cannon_y - 15.0, 0.0);
 
@@ -280,7 +281,8 @@ fn create_rocket(
     let velocity = Vec3::new(vx, vy, 0.0);
 
     let scale_factor = 1.0 / 8.0;
-    let mut sprite = Sprite::new_with_mask(texture, mask).expect("Could not create rocket sprite");
+    let mut sprite = Sprite::new_with_mask(texture, mask)?;
+    sprite.color = color;
     sprite.global_scale = Vec3::new(86.0 * scale_factor, 287.0 * scale_factor, 0.0);
     sprite.local_position = Vec3::new(
         (-86.0 * scale_factor) / 2.0,
@@ -289,11 +291,11 @@ fn create_rocket(
     );
     sprite.global_position = position;
 
-    Rocket {
+    Ok(Rocket {
         player_id,
         sprite,
         velocity,
-    }
+    })
 }
 
 fn contour_function(x: f32, max_y: f32, a: f32, b: f32, c: f32) -> f32 {
@@ -366,12 +368,13 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                 game.game_state.rocket = Some(create_rocket(
                     game.rocket_texture.clone(),
                     player.cannon_sprite.mask(),
+                    player.cannon_sprite.color,
                     player.cannon_angle,
                     player.cannon_power as f32,
                     x as f32,
                     y,
                     player.id,
-                ));
+                ).expect("Could not create rocket"));
             }
         }
         _ => return false,
