@@ -6,10 +6,8 @@ use crate::shapes::{Circle, Collides, Rectangle, Shape};
 use crate::sprite::Sprite;
 use crate::sprite_renderer::SpriteRenderer;
 use crate::sprite_shader::SpriteShader;
-use crate::texture::{
-    create_rgba_texture_from_array_buffer_view,
-    load_image_as_texture,
-};
+use crate::terrain::{generate_terrain_contour, new_terrain_sprite};
+use crate::texture::load_image_as_texture;
 use crate::ui::{post_ui_state, Ui};
 use crate::vector::Vec3;
 
@@ -46,6 +44,7 @@ struct GameState {
 
 struct TankGameFlyweight {
     foreground_sprite: Sprite,
+    foreground_mask_buffer: js_sys::Uint8Array,
     background_sprite: Sprite,
     game_state: GameState,
     sprite_renderer: SpriteRenderer,
@@ -146,27 +145,14 @@ fn initialize(
     let buffer_size = (client_width * client_height * 4) as u32;
     let mut foreground_mask_buffer = js_sys::Uint8Array::new_with_length(buffer_size);
 
-    generate_foreground_mask_buffer(
+    let foreground_sprite = new_terrain_sprite(
+        gl,
+        foreground_texture,
         &mut foreground_mask_buffer,
         &terrain_contour,
         client_width,
-        client_height
-    );
-
-    let foreground_mask_texture = create_rgba_texture_from_array_buffer_view(
-        gl,
-        client_width,
         client_height,
-        &mut foreground_mask_buffer,
     )?;
-
-    let mut foreground_sprite = Sprite::new_with_mask(foreground_texture, foreground_mask_texture)?;
-    foreground_sprite.global_scale = Vec3::new(
-        client_width as f32,
-        client_height as f32,
-        1.0,
-    );
-    foreground_sprite.update();
 
     let mut background_sprite = Sprite::new(gl, background_texture)?;
     background_sprite.global_scale = Vec3::new(
@@ -258,6 +244,7 @@ fn initialize(
 
     Ok(TankGameFlyweight {
         foreground_sprite,
+        foreground_mask_buffer,
         background_sprite,
         game_state,
         sprite_renderer,
@@ -267,6 +254,7 @@ fn initialize(
         client_height
     })
 }
+
 
 fn create_rocket(
     texture: Rc<WebGlTexture>,
@@ -305,52 +293,6 @@ fn create_rocket(
     })
 }
 
-fn contour_function(x: f32, max_y: f32, a: f32, b: f32, c: f32) -> f32 {
-    let peak_height = 100.0;
-    let flatness = 70.0;
-    let offset = max_y / 1.33;
-
-    peak_height / a * (x / flatness * a + a).sin()
-        + peak_height / b * (x / flatness * b + b).sin()
-        + peak_height / c * (x / flatness * c + c).sin()
-        + offset
-}
-
-fn generate_terrain_contour(contour: &mut js_sys::Float32Array, max_height: f32) {
-    let a = rand::random::<f32>() + 1.0;
-    let b = rand::random::<f32>() + 2.0;
-    let c = rand::random::<f32>() + 2.0;
-    console::log_3(&JsValue::from(a), &JsValue::from(b), &JsValue::from(c));
-
-    for i in 0..contour.length() {
-        let height = contour_function(i as f32, max_height, a, b, c);
-        contour.set_index(i, height)
-    }
-}
-
-fn generate_foreground_mask_buffer(
-    buffer: &mut js_sys::Uint8Array,
-    contour: &js_sys::Float32Array,
-    width: u32,
-    height: u32,
-) {
-    for i in 0..width {
-        let contour_height = contour.get_index(i);
-        for j in 0..height {
-            let index = 4 * (j * width + i) as u32;
-
-            let color = match j >= contour_height as u32 {
-                true => 255u8,
-                false => 0u8,
-            };
-
-            buffer.set_index(index, color);
-            buffer.set_index(index + 1, color);
-            buffer.set_index(index + 2, color);
-            buffer.set_index(index + 3, color);
-        }
-    }
-}
 
 fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
     console::log_1(&key_code.into());

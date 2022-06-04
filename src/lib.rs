@@ -8,6 +8,7 @@ mod sprite;
 mod sprite_shader;
 mod sprite_renderer;
 mod shapes;
+mod terrain;
 mod ui;
 
 pub mod game;
