@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::dom::window;
-use crate::shader_cache::ShaderCache;
 use crate::shapes::{Circle, Collides, Rectangle, Shape};
 use crate::sprite::Sprite;
 use crate::sprite_renderer::SpriteRenderer;
+use crate::sprite_shader::SpriteShader;
 use crate::texture::{
-    create_rgba_texture_from_array_buffer_view, create_rgba_texture_from_u8_array,
+    create_rgba_texture_from_array_buffer_view,
     load_image_as_texture,
 };
 use crate::ui::{post_ui_state, Ui};
@@ -107,19 +107,9 @@ fn initialize(
     let carriage_texture = load_image_as_texture(&gl, "assets/carriage.png")?;
     let cannon_texture = load_image_as_texture(&gl, "assets/cannon.png")?;
     let rocket_texture = load_image_as_texture(&gl, "assets/rocket.png")?;
-    let mask_array = [255, 255, 255, 255];
-    let white_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
-    let mask_array = [255, 0, 0, 255];
-    let red_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
-    let mask_array = [0, 255, 0, 255];
-    let green_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
-    let mask_array = [0, 0, 255, 255];
-    let blue_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
-    let mask_array = [255, 0, 255, 255];
-    let purple_mask = create_rgba_texture_from_u8_array(&gl, 1, 1, &mask_array)?;
 
-    let shader_cache = ShaderCache::new(gl)?;
-    let sprite_renderer = SpriteRenderer::new(gl, shader_cache.sprite_shader())?;
+    let sprite_shader = Rc::new(SpriteShader::new(gl)?);
+    let sprite_renderer = SpriteRenderer::new(gl, sprite_shader.clone())?;
 
     let mut terrain_contour = js_sys::Float32Array::new_with_length(canvas.client_width() as u32);
     generate_terrain_contour(&mut terrain_contour, canvas.client_height() as f32);
@@ -129,6 +119,13 @@ fn initialize(
         (0.3f32 * canvas.client_width() as f32) as u32,
         (0.5f32 * canvas.client_width() as f32) as u32,
         (0.75f32 * canvas.client_width() as f32) as u32,
+    ];
+
+    let player_colors = [
+        [1.0, 0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0, 1.0],
+        [1.0, 1.0, 0.0, 1.0]
     ];
 
     // Flatten the terrain under the player positions
@@ -158,7 +155,7 @@ fn initialize(
         &mut foreground_mask_buffer,
     )?;
 
-    let mut foreground_sprite = Sprite::new(foreground_texture, foreground_mask_texture);
+    let mut foreground_sprite = Sprite::new_with_mask(foreground_texture, foreground_mask_texture)?;
     foreground_sprite.global_scale = Vec3::new(
         canvas.client_width() as f32,
         canvas.client_height() as f32,
@@ -166,7 +163,7 @@ fn initialize(
     );
     foreground_sprite.update();
 
-    let mut background_sprite = Sprite::new(background_texture, white_mask);
+    let mut background_sprite = Sprite::new(gl, background_texture)?;
     background_sprite.global_scale = Vec3::new(
         canvas.client_width() as f32,
         canvas.client_height() as f32,
@@ -183,10 +180,9 @@ fn initialize(
         1.0,
     );
 
-    let sprite_shader = shader_cache.sprite_shader();
-    gl.use_program(Some(sprite_shader.program()));
+    gl.use_program(Some(&sprite_shader.program));
     gl.uniform_matrix4fv_with_f32_array(
-        Some(sprite_shader.projection_matrix_uniform()),
+        Some(&sprite_shader.projection_matrix_uniform),
         false,
         projection.data(),
     );
@@ -198,8 +194,8 @@ fn initialize(
             is_alive: true,
             terrain_position: player_positions[0],
             cannon_angle: 45.0,
-            cannon_sprite: Sprite::new(cannon_texture.clone(), red_mask.clone()),
-            carriage_sprite: Sprite::new(carriage_texture.clone(), red_mask.clone()),
+            cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[0])?,
+            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[0])?,
             cannon_power: 200,
         },
         Player {
@@ -207,8 +203,8 @@ fn initialize(
             is_alive: true,
             terrain_position: player_positions[1],
             cannon_angle: 45.0,
-            cannon_sprite: Sprite::new(cannon_texture.clone(), green_mask.clone()),
-            carriage_sprite: Sprite::new(carriage_texture.clone(), green_mask.clone()),
+            cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[1])?,
+            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[1])?,
             cannon_power: 200,
         },
         Player {
@@ -216,8 +212,8 @@ fn initialize(
             is_alive: true,
             terrain_position: player_positions[2],
             cannon_angle: 45.0,
-            cannon_sprite: Sprite::new(cannon_texture.clone(), blue_mask.clone()),
-            carriage_sprite: Sprite::new(carriage_texture.clone(), blue_mask.clone()),
+            cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[2])?,
+            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[2])?,
             cannon_power: 200,
         },
         Player {
@@ -225,8 +221,8 @@ fn initialize(
             is_alive: true,
             terrain_position: player_positions[3],
             cannon_angle: 45.0,
-            cannon_sprite: Sprite::new(cannon_texture.clone(), purple_mask.clone()),
-            carriage_sprite: Sprite::new(carriage_texture.clone(), purple_mask.clone()),
+            cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[3])?,
+            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[3])?,
             cannon_power: 200,
         },
     ];
@@ -284,7 +280,7 @@ fn create_rocket(
     let velocity = Vec3::new(vx, vy, 0.0);
 
     let scale_factor = 1.0 / 8.0;
-    let mut sprite = Sprite::new(texture, mask);
+    let mut sprite = Sprite::new_with_mask(texture, mask).expect("Could not create rocket sprite");
     sprite.global_scale = Vec3::new(86.0 * scale_factor, 287.0 * scale_factor, 0.0);
     sprite.local_position = Vec3::new(
         (-86.0 * scale_factor) / 2.0,
@@ -513,7 +509,7 @@ fn render_shape(
     texture: Rc<WebGlTexture>,
     game: &TankGameFlyweight,
 ) {
-    let mut sprite = Sprite::new(texture, game.background_sprite.mask());
+    let mut sprite = Sprite::new(gl, texture).expect("Could not create shape sprite");
     match shape {
         Shape::Rectangle(rectangle) => {
             sprite.global_position = rectangle.top_left;

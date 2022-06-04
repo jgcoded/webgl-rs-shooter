@@ -5,7 +5,6 @@ mod shader;
 mod texture;
 mod vector;
 mod sprite;
-mod shader_cache;
 mod sprite_shader;
 mod sprite_renderer;
 mod shapes;

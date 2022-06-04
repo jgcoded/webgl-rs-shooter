@@ -34,14 +34,14 @@ impl SpriteRenderer {
             let offset = 0;
             gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&square_buffer));
             gl.vertex_attrib_pointer_with_i32(
-                shader.vertex_position_attrib().try_into().unwrap(),
+                shader.vertex_position_attrib.try_into().unwrap(),
                 num_components,
                 buffer_type,
                 normalized,
                 stride,
                 offset,
             );
-            gl.enable_vertex_attrib_array(shader.vertex_position_attrib().try_into().unwrap());
+            gl.enable_vertex_attrib_array(shader.vertex_position_attrib.try_into().unwrap());
         }
 
         {
@@ -52,24 +52,24 @@ impl SpriteRenderer {
             let offset = 0;
             gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&texture_buffer));
             gl.vertex_attrib_pointer_with_i32(
-                shader.vertex_texture_attrib().try_into().unwrap(),
+                shader.vertex_texture_attrib.try_into().unwrap(),
                 num_components,
                 buffer_type,
                 normalized,
                 stride,
                 offset,
             );
-            gl.enable_vertex_attrib_array(shader.vertex_texture_attrib().try_into().unwrap());
+            gl.enable_vertex_attrib_array(shader.vertex_texture_attrib.try_into().unwrap());
         }
 
         Ok(SpriteRenderer { shader, vao })
     }
 
     pub fn render(&self, gl: &WebGl2RenderingContext, sprite: &Sprite) {
-        gl.use_program(Some(self.shader.program()));
+        gl.use_program(Some(&self.shader.program));
 
         gl.uniform_matrix4fv_with_f32_array(
-            Some(self.shader.model_matrix_uniform()),
+            Some(&self.shader.model_matrix_uniform),
             false,
             sprite.model().data(),
         );
@@ -78,12 +78,14 @@ impl SpriteRenderer {
 
         gl.active_texture(WebGl2RenderingContext::TEXTURE0);
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&sprite.texture()));
-        gl.uniform1i(Some(self.shader.texture_sampler_uniform()), self.shader.texture_sampler_id());
-    
+        gl.uniform1i(Some(&self.shader.texture_sampler_uniform), 0);
+
         gl.active_texture(WebGl2RenderingContext::TEXTURE1);
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&sprite.mask()));
-        gl.uniform1i(Some(self.shader.mask_sampler_uniform()), self.shader.mask_sampler_id());
-    
+        gl.uniform1i(Some(&self.shader.mask_sampler_uniform), 1);
+
+        gl.uniform4fv_with_f32_array(Some(&self.shader.color_uniform), &sprite.color);
+
         {
             let offset = 0;
             let vertex_count = 6;
