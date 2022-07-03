@@ -2,11 +2,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::dom::window;
+use crate::particle_emitter::ParticleEmitter;
+use crate::particle_shader::ParticleShader;
 use crate::shapes::{Circle, Collides, Rectangle, Shape};
 use crate::sprite::Sprite;
 use crate::sprite_renderer::SpriteRenderer;
 use crate::sprite_shader::SpriteShader;
-use crate::terrain::{generate_terrain_contour, new_terrain_sprite, generate_terrain_mask};
+use crate::terrain::{generate_terrain_contour, generate_terrain_mask, new_terrain_sprite};
 use crate::texture::load_image_as_texture;
 use crate::ui::{post_ui_state, Ui};
 use crate::vector::Vec3;
@@ -42,7 +44,8 @@ struct GameState {
     rocket: Option<Rocket>,
     terrain_dirty: bool,
     client_width: u32,
-    client_height: u32
+    client_height: u32,
+    exiting: bool
 }
 
 struct TankGameFlyweight {
@@ -51,8 +54,14 @@ struct TankGameFlyweight {
     background_sprite: Sprite,
     game_state: GameState,
     sprite_renderer: SpriteRenderer,
+    carriage_texture: Rc<WebGlTexture>,
+    cannon_texture: Rc<WebGlTexture>,
     rocket_texture: Rc<WebGlTexture>,
-    render_shapes: bool
+    smoke_texture: Rc<WebGlTexture>,
+    smoke_emitter: ParticleEmitter,
+    render_shapes: bool,
+    sprite_shader: Rc<SpriteShader>,
+    particle_shader: Rc<ParticleShader>
 }
 
 #[wasm_bindgen]
@@ -70,10 +79,28 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
             e.prevent_default();
         }
     }) as Box<dyn FnMut(&KeyboardEvent)>);
-
     window().set_onkeydown(Some(keydown_callback.as_ref().unchecked_ref()));
     // Give ownership to the browser
     keydown_callback.forget();
+
+    let beforeunload_game_clone = game.clone();
+    let beforeunload_callback = Closure::wrap(Box::new(move || {
+        let gl = get_rendering_context(&canvas).unwrap();
+        let mut game = beforeunload_game_clone.borrow_mut();
+        game.game_state.exiting = true;
+        game.smoke_emitter.delete(&gl);
+        game.sprite_renderer.delete(&gl);
+        gl.delete_program(Some(&game.particle_shader.program));
+        gl.delete_program(Some(&game.sprite_shader.program));
+        gl.delete_texture(Some(&game.smoke_texture));
+        gl.delete_texture(Some(&game.rocket_texture));
+        gl.delete_texture(Some(&game.cannon_texture));
+        gl.delete_texture(Some(&game.carriage_texture));
+        gl.delete_texture(Some(&game.foreground_sprite.texture()));
+        gl.delete_texture(Some(&game.background_sprite.texture()));
+    }) as Box<dyn FnMut()>);
+    window().set_onbeforeunload(Some(beforeunload_callback.as_ref().unchecked_ref()));
+    beforeunload_callback.forget();
 
     let f = Rc::new(RefCell::new(None));
     let g = f.clone();
@@ -81,6 +108,11 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |t: &JsValue| {
         let mut game = loop_clone.borrow_mut();
 
+        if game.game_state.exiting {
+            return
+        }
+
+        // timestamp is in milliseconds
         let timestamp = t.as_f64().unwrap();
         let dt = (timestamp - game.game_state.timestamp) / 1000.0;
 
@@ -113,9 +145,20 @@ fn initialize(
     let carriage_texture = load_image_as_texture(&gl, "assets/carriage.png")?;
     let cannon_texture = load_image_as_texture(&gl, "assets/cannon.png")?;
     let rocket_texture = load_image_as_texture(&gl, "assets/rocket.png")?;
+    let smoke_texture = load_image_as_texture(&gl, "assets/smoke.png")?;
 
     let sprite_shader = Rc::new(SpriteShader::new(gl)?);
     let sprite_renderer = SpriteRenderer::new(gl, sprite_shader.clone())?;
+
+    let particle_shader = Rc::new(ParticleShader::new(gl)?);
+    let mut smoke_emitter =
+        ParticleEmitter::new(gl, smoke_texture.clone(), particle_shader.clone())?;
+    smoke_emitter.initial_particle_life_seconds = 2.;
+    smoke_emitter.initial_particle_scale = 25.;
+    smoke_emitter.initial_particle_color = [0.2, 0.2, 0.2, 1.0];
+    smoke_emitter.max_particle_offset = Vec3::new(10., 10., 0.);
+    smoke_emitter.max_particles = 200;
+    smoke_emitter.spawn_frequency_hz = 120.;
 
     let mut terrain_contour = js_sys::Float32Array::new_with_length(client_width as u32);
     generate_terrain_contour(&mut terrain_contour, client_height as f32);
@@ -131,7 +174,7 @@ fn initialize(
         [1.0, 0.0, 0.0, 1.0],
         [0.0, 1.0, 0.0, 1.0],
         [0.0, 0.0, 1.0, 1.0],
-        [1.0, 0.0, 1.0, 1.0]
+        [1.0, 0.0, 1.0, 1.0],
     ];
 
     // Flatten the terrain under the player positions
@@ -157,11 +200,7 @@ fn initialize(
     )?;
 
     let mut background_sprite = Sprite::new(gl, background_texture)?;
-    background_sprite.global_scale = Vec3::new(
-        client_width as f32,
-        client_height as f32,
-        1.0,
-    );
+    background_sprite.global_scale = Vec3::new(client_width as f32, client_height as f32, 1.0);
     background_sprite.update();
 
     let projection = Mat4::orthographic(
@@ -173,9 +212,20 @@ fn initialize(
         1.0,
     );
 
+    // preload shaders with projection as it won't change
+    // This is an optimization to avoid a uniform call every frame
     gl.use_program(Some(&sprite_shader.program));
     gl.uniform_matrix4fv_with_f32_array(
         Some(&sprite_shader.projection_matrix_uniform),
+        false,
+        projection.data(),
+    );
+    gl.use_program(None);
+
+    gl.use_program(Some(&particle_shader.program));
+
+    gl.uniform_matrix4fv_with_f32_array(
+        Some(&particle_shader.projection_matrix_uniform),
         false,
         projection.data(),
     );
@@ -188,7 +238,11 @@ fn initialize(
             terrain_position: player_positions[0],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[0])?,
-            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[0])?,
+            carriage_sprite: Sprite::new_with_color(
+                gl,
+                carriage_texture.clone(),
+                player_colors[0],
+            )?,
             cannon_power: 200,
         },
         Player {
@@ -197,7 +251,11 @@ fn initialize(
             terrain_position: player_positions[1],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[1])?,
-            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[1])?,
+            carriage_sprite: Sprite::new_with_color(
+                gl,
+                carriage_texture.clone(),
+                player_colors[1],
+            )?,
             cannon_power: 200,
         },
         Player {
@@ -206,7 +264,11 @@ fn initialize(
             terrain_position: player_positions[2],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[2])?,
-            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[2])?,
+            carriage_sprite: Sprite::new_with_color(
+                gl,
+                carriage_texture.clone(),
+                player_colors[2],
+            )?,
             cannon_power: 200,
         },
         Player {
@@ -215,7 +277,11 @@ fn initialize(
             terrain_position: player_positions[3],
             cannon_angle: 45.0,
             cannon_sprite: Sprite::new_with_color(gl, cannon_texture.clone(), player_colors[3])?,
-            carriage_sprite: Sprite::new_with_color(gl, carriage_texture.clone(), player_colors[3])?,
+            carriage_sprite: Sprite::new_with_color(
+                gl,
+                carriage_texture.clone(),
+                player_colors[3],
+            )?,
             cannon_power: 200,
         },
     ];
@@ -232,7 +298,8 @@ fn initialize(
         players,
         terrain_dirty: false,
         client_width,
-        client_height
+        client_height,
+        exiting: false
     };
 
     update_ui(&game_state);
@@ -244,7 +311,13 @@ fn initialize(
         game_state,
         sprite_renderer,
         rocket_texture,
-        render_shapes: false
+        cannon_texture,
+        carriage_texture,
+        smoke_texture,
+        smoke_emitter,
+        sprite_shader,
+        particle_shader,
+        render_shapes: false,
     })
 }
 
@@ -261,7 +334,6 @@ fn reposition_player(player: &mut Player, terrain_contour: &Float32Array) {
     player.cannon_sprite.global_rotation = player.cannon_angle;
     player.cannon_sprite.update();
 }
-
 
 fn create_rocket(
     texture: Rc<WebGlTexture>,
@@ -300,7 +372,6 @@ fn create_rocket(
     })
 }
 
-
 fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
     console::log_1(&key_code.into());
     let player = &mut game.game_state.players[game.game_state.current_player];
@@ -321,16 +392,21 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                 let x = player.terrain_position;
                 let y = game.game_state.terrain_contour.get_index(x);
 
-                game.game_state.rocket = Some(create_rocket(
-                    game.rocket_texture.clone(),
-                    player.cannon_sprite.mask(),
-                    player.cannon_sprite.color,
-                    player.cannon_angle,
-                    player.cannon_power as f32,
-                    x as f32,
-                    y,
-                    player.id,
-                ).expect("Could not create rocket"));
+                game.game_state.rocket = Some(
+                    create_rocket(
+                        game.rocket_texture.clone(),
+                        player.cannon_sprite.mask(),
+                        player.cannon_sprite.color,
+                        player.cannon_angle,
+                        player.cannon_power as f32,
+                        x as f32,
+                        y,
+                        player.id,
+                    )
+                    .expect("Could not create rocket"),
+                );
+                game.smoke_emitter.reset();
+                game.smoke_emitter.spawn_frequency_hz = 120.;
             }
         }
         _ => return false,
@@ -347,22 +423,27 @@ fn update_players(game_state: &mut GameState) {
             player.cannon_sprite.update()
         }
 
-        let position_y = player.carriage_sprite.global_position.y() + player.carriage_sprite.global_scale.y();
-        let terrain_height = game_state.terrain_contour.get_index(player.terrain_position);
+        let position_y =
+            player.carriage_sprite.global_position.y() + player.carriage_sprite.global_scale.y();
+        let terrain_height = game_state
+            .terrain_contour
+            .get_index(player.terrain_position);
 
         if position_y >= game_state.client_height as f32 {
             player.is_alive = false;
         } else if terrain_height > position_y {
             reposition_player(player, &game_state.terrain_contour);
         }
-
     }
 }
 
 fn is_rocket_in_bounds(rocket: &Rocket, canvas_width: u32, canvas_height: u32) -> bool {
     let position = &rocket.sprite.global_position;
 
-    position.x() > 0.0 && position.y() > 0.0 && position.x() < canvas_width as f32 && position.y() < canvas_height as f32
+    position.x() > 0.0
+        && position.y() > 0.0
+        && position.x() < canvas_width as f32
+        && position.y() < canvas_height as f32
 }
 
 fn update_rocket(rocket: &mut Rocket, dt: f32) {
@@ -452,15 +533,18 @@ fn next_turn(state: &mut GameState) {
     update_ui(state);
 }
 
-fn add_crater_to_terrain(terrain_contour: &mut Float32Array, crater_center_x: f32, crater_radius: f32) {
-
+fn add_crater_to_terrain(
+    terrain_contour: &mut Float32Array,
+    crater_center_x: f32,
+    crater_radius: f32,
+) {
     let crater_start = (crater_center_x - crater_radius).floor() as u32 + 1;
     let crater_end = (crater_center_x + crater_radius).ceil() as u32 - 1;
     let crater_center_y = terrain_contour.get_index(crater_center_x as u32);
 
     for x in crater_start..crater_end {
         let dx = (crater_center_x - x as f32).abs();
-        let dy = (crater_radius*crater_radius - dx*dx).sqrt();
+        let dy = (crater_radius * crater_radius - dx * dx).sqrt();
 
         let current_terrain_height = terrain_contour.get_index(x);
         let new_height = crater_center_y + dy;
@@ -472,30 +556,48 @@ fn add_crater_to_terrain(terrain_contour: &mut Float32Array, crater_center_x: f3
 }
 
 fn update(game: &mut TankGameFlyweight, dt: f32) {
-
     if let Some(rocket) = &mut game.game_state.rocket {
         update_rocket(rocket, dt);
-        if !is_rocket_in_bounds(rocket, game.game_state.client_width, game.game_state.client_height) {
+        game.smoke_emitter.location = rocket.sprite.global_position - rocket.sprite.global_scale.scaled(0.5);
+
+        if !is_rocket_in_bounds(
+            rocket,
+            game.game_state.client_width,
+            game.game_state.client_height,
+        ) {
             game.game_state.rocket = None;
+            game.smoke_emitter.spawn_frequency_hz = 0.;
             next_turn(&mut game.game_state);
         } else if let Some(player) = rocket_collided(rocket, &game.game_state.players) {
-
-            add_crater_to_terrain(&mut game.game_state.terrain_contour, game.game_state.players[player].carriage_sprite.global_position.x(), 40.0f32);
+            add_crater_to_terrain(
+                &mut game.game_state.terrain_contour,
+                game.game_state.players[player]
+                    .carriage_sprite
+                    .global_position
+                    .x(),
+                40.0f32,
+            );
             game.game_state.terrain_dirty = true;
 
             game.game_state.players[player].is_alive = false;
             game.game_state.rocket = None;
+            game.smoke_emitter.spawn_frequency_hz = 0.;
             next_turn(&mut game.game_state);
         } else if rocket_hit_terrain(rocket, &game.game_state.terrain_contour) {
-
-            add_crater_to_terrain(&mut game.game_state.terrain_contour, rocket.sprite.global_position.x(), 40.0f32);
+            add_crater_to_terrain(
+                &mut game.game_state.terrain_contour,
+                rocket.sprite.global_position.x(),
+                40.0f32,
+            );
             game.game_state.terrain_dirty = true;
             game.game_state.rocket = None;
+            game.smoke_emitter.spawn_frequency_hz = 0.;
             next_turn(&mut game.game_state)
         }
     }
 
     update_players(&mut game.game_state);
+    game.smoke_emitter.update(dt);
 
     if !game.game_state.players[game.game_state.current_player].is_alive {
         next_turn(&mut game.game_state);
@@ -511,8 +613,9 @@ fn prepare_dirty_resources(gl: &WebGl2RenderingContext, game: &mut TankGameFlywe
             &mut game.foreground_mask_buffer,
             &game.game_state.terrain_contour,
             game.game_state.client_width,
-            game.game_state.client_height
-        ).expect("Could not create terrain mask");
+            game.game_state.client_height,
+        )
+        .expect("Could not create terrain mask");
 
         game.foreground_sprite.set_mask(new_mask.clone());
         gl.delete_texture(Some(&old_mask));
@@ -580,5 +683,10 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
             render_shape(gl, &shape, rocket.sprite.mask(), game);
         }
     }
-}
 
+    gl.blend_func(
+        WebGl2RenderingContext::SRC_ALPHA,
+        WebGl2RenderingContext::ONE,
+    );
+    game.smoke_emitter.render(gl);
+}

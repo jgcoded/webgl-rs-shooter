@@ -1,10 +1,8 @@
-use std::{
-    ops::{Add, AddAssign, Sub},
-};
+use std::ops::{Add, AddAssign, Sub};
 
 #[derive(Debug)]
 pub struct Vec3 {
-    data: [f32; 3],
+    pub data: [f32; 3],
 }
 
 impl Vec3 {

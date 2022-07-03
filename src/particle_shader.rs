@@ -1,32 +1,36 @@
 use wasm_bindgen::JsValue;
-use web_sys::{WebGl2RenderingContext, WebGlUniformLocation, WebGlProgram};
+use web_sys::{WebGlProgram, WebGlUniformLocation, WebGl2RenderingContext};
 
 use crate::shader::new_shader_program;
 
-pub struct SpriteShader {
+
+
+pub struct ParticleShader {
     pub program: WebGlProgram,
     pub vertex_position_attrib: i32,
     pub vertex_texture_attrib: i32,
-    pub model_matrix_uniform: WebGlUniformLocation,
     pub projection_matrix_uniform: WebGlUniformLocation,
     pub texture_sampler_uniform: WebGlUniformLocation,
-    pub mask_sampler_uniform: WebGlUniformLocation,
-    pub color_uniform: WebGlUniformLocation
+    pub color_uniform: WebGlUniformLocation,
+    pub offset_uniform: WebGlUniformLocation,
+    pub scale_uniform: WebGlUniformLocation
 }
 
-impl SpriteShader {
-    pub fn new(gl: &WebGl2RenderingContext) -> Result<SpriteShader, JsValue> {
+impl ParticleShader {
+
+    pub fn new(gl: &WebGl2RenderingContext) -> Result<ParticleShader, JsValue> {
         let vertex_shader_src = r##"
         attribute vec4 aVertexPosition;
         attribute vec2 aTextureCoord;
 
-        uniform mat4 uModelMatrix;
         uniform mat4 uProjectionMatrix;
+        uniform float uScale;
+        uniform vec3 uOffset;
 
         varying highp vec2 vTextureCoord;
 
         void main(void) {
-          gl_Position = uProjectionMatrix * uModelMatrix * aVertexPosition;
+          gl_Position = uProjectionMatrix * vec4((aVertexPosition.xy * uScale) + uOffset.xy, 0.0, 1.0);
           vTextureCoord = aTextureCoord;
         }
             "##;
@@ -37,13 +41,11 @@ impl SpriteShader {
         varying highp vec2 vTextureCoord;
 
         uniform sampler2D uTextureSampler;
-        uniform sampler2D uMaskSampler;
         uniform vec4 uColor;
 
         void main(void) {
             vec4 texture = texture2D(uTextureSampler, vTextureCoord);
-            vec4 mask = texture2D(uMaskSampler, vTextureCoord);
-            gl_FragColor = texture * mask * uColor;
+            gl_FragColor = texture * uColor;
         }
             "##;
 
@@ -52,35 +54,36 @@ impl SpriteShader {
         let vertex_position_attrib = gl.get_attrib_location(&program, "aVertexPosition");
         let vertex_texture_attrib = gl.get_attrib_location(&program, "aTextureCoord");
 
-        let model_matrix_uniform = gl
-            .get_uniform_location(&program, "uModelMatrix")
-            .ok_or_else(|| String::from("Could not get model uniform location"))?;
-
         let projection_matrix_uniform = gl
             .get_uniform_location(&program, "uProjectionMatrix")
-            .ok_or_else(|| String::from("Could not get model uniform location"))?;
+            .ok_or_else(|| String::from("Could not get projection uniform location"))?;
         let texture_sampler_uniform = gl
             .get_uniform_location(&program, "uTextureSampler")
             .ok_or_else(|| String::from("Could not get texture sampler uniform location"))?;
-
-        let mask_sampler_uniform = gl
-            .get_uniform_location(&program, "uMaskSampler")
-            .ok_or_else(|| String::from("Could not get mask sampler uniform location"))?;
 
         let color_uniform = gl
             .get_uniform_location(&program, "uColor")
             .ok_or_else(|| String::from("Could not get color sampler uniform location"))?;
 
-        Ok(SpriteShader {
+        let scale_uniform = gl
+            .get_uniform_location(&program, "uScale")
+            .ok_or_else(|| String::from("Could not get scale uniform location"))?;
+
+        let offset_uniform = gl
+            .get_uniform_location(&program, "uOffset")
+            .ok_or_else(|| String::from("Could not get offset uniform location"))?;
+
+        Ok(ParticleShader {
             program,
             vertex_position_attrib,
             vertex_texture_attrib,
-            model_matrix_uniform,
             projection_matrix_uniform,
             texture_sampler_uniform,
-            mask_sampler_uniform,
-            color_uniform
+            color_uniform,
+            scale_uniform,
+            offset_uniform
         })
     }
+
 }
 

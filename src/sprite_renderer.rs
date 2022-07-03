@@ -1,15 +1,14 @@
-use std::convert::TryInto;
 use std::rc::Rc;
 
-use crate::buffer::{create_square_buffer, create_texture_buffer};
 use crate::sprite::Sprite;
 use crate::sprite_shader::SpriteShader;
+use crate::vao::VAO;
 use wasm_bindgen::JsValue;
-use web_sys::{WebGl2RenderingContext, WebGlVertexArrayObject};
+use web_sys::WebGl2RenderingContext;
 
 pub struct SpriteRenderer {
     shader: Rc<SpriteShader>,
-    vao: WebGlVertexArrayObject,
+    vao: VAO
 }
 
 impl SpriteRenderer {
@@ -17,51 +16,8 @@ impl SpriteRenderer {
         gl: &WebGl2RenderingContext,
         shader: Rc<SpriteShader>,
     ) -> Result<SpriteRenderer, JsValue> {
-        let square_buffer = create_square_buffer(&gl)?;
-        let texture_buffer = create_texture_buffer(&gl)?;
 
-        let vao = gl
-            .create_vertex_array()
-            .ok_or_else(|| String::from("Could not create VAO"))?;
-
-        gl.bind_vertex_array(Some(&vao));
-
-        {
-            let num_components = 2;
-            let buffer_type = WebGl2RenderingContext::FLOAT;
-            let normalized = false;
-            let stride = 0;
-            let offset = 0;
-            gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&square_buffer));
-            gl.vertex_attrib_pointer_with_i32(
-                shader.vertex_position_attrib.try_into().unwrap(),
-                num_components,
-                buffer_type,
-                normalized,
-                stride,
-                offset,
-            );
-            gl.enable_vertex_attrib_array(shader.vertex_position_attrib.try_into().unwrap());
-        }
-
-        {
-            let num_components = 2;
-            let buffer_type = WebGl2RenderingContext::FLOAT;
-            let normalized = false;
-            let stride = 0;
-            let offset = 0;
-            gl.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&texture_buffer));
-            gl.vertex_attrib_pointer_with_i32(
-                shader.vertex_texture_attrib.try_into().unwrap(),
-                num_components,
-                buffer_type,
-                normalized,
-                stride,
-                offset,
-            );
-            gl.enable_vertex_attrib_array(shader.vertex_texture_attrib.try_into().unwrap());
-        }
-
+        let vao = VAO::new_with_sprite_shader(gl, shader.clone())?;
         Ok(SpriteRenderer { shader, vao })
     }
 
@@ -74,7 +30,7 @@ impl SpriteRenderer {
             sprite.model().data(),
         );
 
-        gl.bind_vertex_array(Some(&self.vao));
+        gl.bind_vertex_array(Some(&self.vao.vao));
 
         gl.active_texture(WebGl2RenderingContext::TEXTURE0);
         gl.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&sprite.texture()));
@@ -93,5 +49,9 @@ impl SpriteRenderer {
         }
 
         gl.bind_vertex_array(None);
+    }
+
+    pub fn delete(&self, gl: &WebGl2RenderingContext) {
+        self.vao.delete(gl);
     }
 }
