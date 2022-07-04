@@ -45,7 +45,7 @@ struct GameState {
     terrain_dirty: bool,
     client_width: u32,
     client_height: u32,
-    exiting: bool
+    exiting: bool,
 }
 
 struct TankGameFlyweight {
@@ -58,10 +58,12 @@ struct TankGameFlyweight {
     cannon_texture: Rc<WebGlTexture>,
     rocket_texture: Rc<WebGlTexture>,
     smoke_texture: Rc<WebGlTexture>,
+    explosion_texture: Rc<WebGlTexture>,
     smoke_emitter: ParticleEmitter,
+    explosion_emitter: ParticleEmitter,
     render_shapes: bool,
     sprite_shader: Rc<SpriteShader>,
-    particle_shader: Rc<ParticleShader>
+    particle_shader: Rc<ParticleShader>,
 }
 
 #[wasm_bindgen]
@@ -88,10 +90,12 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
         let gl = get_rendering_context(&canvas).unwrap();
         let mut game = beforeunload_game_clone.borrow_mut();
         game.game_state.exiting = true;
+        game.explosion_emitter.delete(&gl);
         game.smoke_emitter.delete(&gl);
         game.sprite_renderer.delete(&gl);
         gl.delete_program(Some(&game.particle_shader.program));
         gl.delete_program(Some(&game.sprite_shader.program));
+        gl.delete_texture(Some(&game.explosion_texture));
         gl.delete_texture(Some(&game.smoke_texture));
         gl.delete_texture(Some(&game.rocket_texture));
         gl.delete_texture(Some(&game.cannon_texture));
@@ -109,7 +113,7 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
         let mut game = loop_clone.borrow_mut();
 
         if game.game_state.exiting {
-            return
+            return;
         }
 
         // timestamp is in milliseconds
@@ -146,6 +150,7 @@ fn initialize(
     let cannon_texture = load_image_as_texture(&gl, "assets/cannon.png")?;
     let rocket_texture = load_image_as_texture(&gl, "assets/rocket.png")?;
     let smoke_texture = load_image_as_texture(&gl, "assets/smoke.png")?;
+    let explosion_texture = load_image_as_texture(&gl, "assets/explosion.png")?;
 
     let sprite_shader = Rc::new(SpriteShader::new(gl)?);
     let sprite_renderer = SpriteRenderer::new(gl, sprite_shader.clone())?;
@@ -158,7 +163,18 @@ fn initialize(
     smoke_emitter.initial_particle_color = [0.2, 0.2, 0.2, 1.0];
     smoke_emitter.max_particle_offset = Vec3::new(10., 10., 0.);
     smoke_emitter.max_particles = 200;
-    smoke_emitter.spawn_frequency_hz = 120.;
+    smoke_emitter.spawn_frequency_hz = 0.;
+
+    let mut explosion_emitter =
+        ParticleEmitter::new(gl, explosion_texture.clone(), particle_shader.clone())?;
+
+    explosion_emitter.emitter_life_seconds = 2.;
+    explosion_emitter.initial_particle_life_seconds = 1.;
+    explosion_emitter.initial_particle_scale = 100.;
+    explosion_emitter.initial_particle_color = [1., 1., 1., 1.];
+    explosion_emitter.max_particle_offset = Vec3::new(50., 40., 0.);
+    explosion_emitter.max_particles = 100;
+    explosion_emitter.spawn_frequency_hz = 0.;
 
     let mut terrain_contour = js_sys::Float32Array::new_with_length(client_width as u32);
     generate_terrain_contour(&mut terrain_contour, client_height as f32);
@@ -299,7 +315,7 @@ fn initialize(
         terrain_dirty: false,
         client_width,
         client_height,
-        exiting: false
+        exiting: false,
     };
 
     update_ui(&game_state);
@@ -314,7 +330,9 @@ fn initialize(
         cannon_texture,
         carriage_texture,
         smoke_texture,
+        explosion_texture,
         smoke_emitter,
+        explosion_emitter,
         sprite_shader,
         particle_shader,
         render_shapes: false,
@@ -558,7 +576,12 @@ fn add_crater_to_terrain(
 fn update(game: &mut TankGameFlyweight, dt: f32) {
     if let Some(rocket) = &mut game.game_state.rocket {
         update_rocket(rocket, dt);
-        game.smoke_emitter.location = rocket.sprite.global_position - rocket.sprite.global_scale.scaled(0.5);
+        game.smoke_emitter.location = rocket.sprite.global_position
+            - Vec3::new(
+                game.smoke_emitter.initial_particle_scale / 2.,
+                game.smoke_emitter.initial_particle_scale / 2.,
+                0.,
+            );
 
         if !is_rocket_in_bounds(
             rocket,
@@ -580,8 +603,18 @@ fn update(game: &mut TankGameFlyweight, dt: f32) {
             game.game_state.terrain_dirty = true;
 
             game.game_state.players[player].is_alive = false;
-            game.game_state.rocket = None;
             game.smoke_emitter.spawn_frequency_hz = 0.;
+            game.explosion_emitter.location = game.game_state.players[player]
+                .carriage_sprite
+                .global_position
+                - Vec3::new(
+                    game.explosion_emitter.initial_particle_scale / 2.,
+                    game.explosion_emitter.initial_particle_scale / 2.,
+                    0.,
+                );
+            game.explosion_emitter.reset();
+            game.explosion_emitter.spawn_frequency_hz = 50.;
+            game.game_state.rocket = None;
             next_turn(&mut game.game_state);
         } else if rocket_hit_terrain(rocket, &game.game_state.terrain_contour) {
             add_crater_to_terrain(
@@ -590,14 +623,23 @@ fn update(game: &mut TankGameFlyweight, dt: f32) {
                 40.0f32,
             );
             game.game_state.terrain_dirty = true;
-            game.game_state.rocket = None;
             game.smoke_emitter.spawn_frequency_hz = 0.;
+            game.explosion_emitter.location = rocket.sprite.global_position
+                - Vec3::new(
+                    game.explosion_emitter.initial_particle_scale / 2.,
+                    game.explosion_emitter.initial_particle_scale / 2.,
+                    0.,
+                );
+            game.explosion_emitter.reset();
+            game.explosion_emitter.spawn_frequency_hz = 50.;
+            game.game_state.rocket = None;
             next_turn(&mut game.game_state)
         }
     }
 
     update_players(&mut game.game_state);
     game.smoke_emitter.update(dt);
+    game.explosion_emitter.update(dt);
 
     if !game.game_state.players[game.game_state.current_player].is_alive {
         next_turn(&mut game.game_state);
@@ -689,4 +731,5 @@ fn render(gl: &WebGl2RenderingContext, game: &TankGameFlyweight) {
         WebGl2RenderingContext::ONE,
     );
     game.smoke_emitter.render(gl);
+    game.explosion_emitter.render(gl);
 }

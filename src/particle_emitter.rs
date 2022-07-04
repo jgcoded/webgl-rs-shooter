@@ -1,21 +1,22 @@
 use std::rc::Rc;
 
 use wasm_bindgen::JsValue;
-use web_sys::{WebGlTexture, WebGl2RenderingContext};
+use web_sys::{WebGl2RenderingContext, WebGlTexture};
 
-use crate::{particle_shader::ParticleShader, vector::Vec3, vao::VAO};
+use crate::{particle_shader::ParticleShader, vao::VAO, vector::Vec3};
 
 pub struct Particle {
     pub life: f32,
     pub scale: f32,
     pub offset: Vec3,
-    pub color: [f32; 4]
+    pub color: [f32; 4],
 }
 
 pub struct ParticleEmitter {
     pub location: Vec3,
     pub texture: Rc<WebGlTexture>,
     pub spawn_frequency_hz: f32,
+    pub emitter_life_seconds: f32,
     pub initial_particle_life_seconds: f32,
     pub initial_particle_scale: f32,
     pub initial_particle_color: [f32; 4],
@@ -29,11 +30,16 @@ pub struct ParticleEmitter {
 }
 
 impl ParticleEmitter {
-    pub fn new(gl: &WebGl2RenderingContext, texture: Rc<WebGlTexture>, shader: Rc<ParticleShader>) -> Result<ParticleEmitter, JsValue> {
+    pub fn new(
+        gl: &WebGl2RenderingContext,
+        texture: Rc<WebGlTexture>,
+        shader: Rc<ParticleShader>,
+    ) -> Result<ParticleEmitter, JsValue> {
         Ok(ParticleEmitter {
             location: Vec3::new(0., 0., 0.),
             texture,
             spawn_frequency_hz: 1.,
+            emitter_life_seconds: 0.,
             initial_particle_life_seconds: 0.,
             initial_particle_scale: 1.,
             initial_particle_color: [1.0, 1.0, 1.0, 1.0],
@@ -57,6 +63,10 @@ impl ParticleEmitter {
             p.life > 0.
         });
 
+        if self.emitter_life_seconds > 0. && self.time > self.emitter_life_seconds {
+            return;
+        }
+
         let mut num_particles_to_spawn =
             ((self.time - self.last_spawn_time) * self.spawn_frequency_hz).floor() as usize;
 
@@ -65,15 +75,17 @@ impl ParticleEmitter {
 
             while num_particles_to_spawn > 0 && self.particles.len() < self.max_particles {
                 let offset = Vec3::new(
-                    self.max_particle_offset.x()*rand::random::<f32>() - self.max_particle_offset.x()/2.,
-                    self.max_particle_offset.y()*rand::random::<f32>() - self.max_particle_offset.y()/2.,
-                    0.
+                    self.max_particle_offset.x() * rand::random::<f32>()
+                        - self.max_particle_offset.x() / 2.,
+                    self.max_particle_offset.y() * rand::random::<f32>()
+                        - self.max_particle_offset.y() / 2.,
+                    0.,
                 );
                 self.particles.push(Particle {
                     life: self.initial_particle_life_seconds,
                     scale: self.initial_particle_scale,
                     offset: self.location + offset,
-                    color: self.initial_particle_color
+                    color: self.initial_particle_color,
                 });
                 num_particles_to_spawn -= 1;
             }
@@ -81,6 +93,10 @@ impl ParticleEmitter {
     }
 
     pub fn render(&self, gl: &WebGl2RenderingContext) {
+        if self.particles.is_empty() {
+            return;
+        }
+
         gl.use_program(Some(&self.shader.program));
 
         gl.active_texture(WebGl2RenderingContext::TEXTURE0);
@@ -100,7 +116,6 @@ impl ParticleEmitter {
             }
 
             gl.bind_vertex_array(None);
-
         }
     }
 
