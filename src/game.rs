@@ -18,7 +18,7 @@ use super::matrix::Mat4;
 
 use js_sys::Float32Array;
 use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{console, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext, WebGlTexture};
+use web_sys::{console, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext, WebGlTexture, HtmlAudioElement};
 
 struct Player {
     id: usize,
@@ -64,6 +64,9 @@ struct TankGameFlyweight {
     render_shapes: bool,
     sprite_shader: Rc<SpriteShader>,
     particle_shader: Rc<ParticleShader>,
+    launch_sound: HtmlAudioElement,
+    hitcannon_sound: HtmlAudioElement,
+    hitterrain_sound: HtmlAudioElement,
 }
 
 #[wasm_bindgen]
@@ -151,6 +154,10 @@ fn initialize(
     let rocket_texture = load_image_as_texture(&gl, "assets/rocket.png")?;
     let smoke_texture = load_image_as_texture(&gl, "assets/smoke.png")?;
     let explosion_texture = load_image_as_texture(&gl, "assets/explosion.png")?;
+
+    let launch_sound = HtmlAudioElement::new_with_src("assets/launch.wav")?;
+    let hitcannon_sound = HtmlAudioElement::new_with_src("assets/hitcannon.wav")?;
+    let hitterrain_sound = HtmlAudioElement::new_with_src("assets/hitterrain.wav")?;
 
     let sprite_shader = Rc::new(SpriteShader::new(gl)?);
     let sprite_renderer = SpriteRenderer::new(gl, sprite_shader.clone())?;
@@ -335,6 +342,9 @@ fn initialize(
         explosion_emitter,
         sprite_shader,
         particle_shader,
+        launch_sound,
+        hitcannon_sound,
+        hitterrain_sound,
         render_shapes: false,
     })
 }
@@ -390,6 +400,16 @@ fn create_rocket(
     })
 }
 
+fn play_audio(audio: &HtmlAudioElement) {
+    // See https://docs.rs/web-sys/latest/web_sys/struct.HtmlAudioElement.html
+    if audio.ready_state() >= 2 {
+        match audio.play() {
+            Err(..) => console::log_2(&"Could not play audio:".into(), &audio.src().into()),
+            _ => { }
+        }
+    }
+}
+
 fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
     console::log_1(&key_code.into());
     let player = &mut game.game_state.players[game.game_state.current_player];
@@ -425,6 +445,7 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
                 );
                 game.smoke_emitter.reset();
                 game.smoke_emitter.spawn_frequency_hz = 120.;
+                play_audio(&game.launch_sound);
             }
         }
         _ => return false,
@@ -615,6 +636,7 @@ fn update(game: &mut TankGameFlyweight, dt: f32) {
             game.explosion_emitter.reset();
             game.explosion_emitter.spawn_frequency_hz = 50.;
             game.game_state.rocket = None;
+            play_audio(&game.hitcannon_sound);
             next_turn(&mut game.game_state);
         } else if rocket_hit_terrain(rocket, &game.game_state.terrain_contour) {
             add_crater_to_terrain(
@@ -633,6 +655,7 @@ fn update(game: &mut TankGameFlyweight, dt: f32) {
             game.explosion_emitter.reset();
             game.explosion_emitter.spawn_frequency_hz = 50.;
             game.game_state.rocket = None;
+            play_audio(&game.hitterrain_sound);
             next_turn(&mut game.game_state)
         }
     }

@@ -14,7 +14,7 @@ default = ["console_error_panic_hook", "wee_alloc"]
 wasm-bindgen = { version = "0.2.80", features = ["serde-serialize"] }
 
 js-sys = "0.3.57"
-web-sys = { version = "0.3.57", features = ['console', 'Document', 'Element', 'HtmlElement', 'KeyboardEvent', 'HtmlCanvasElement', 'WebGlBuffer', 'WebGlVertexArrayObject', 'WebGl2RenderingContext', 'WebGlProgram', 'WebGlShader', 'WebGlUniformLocation', 'Window', 'HtmlImageElement', 'WebGlTexture'] }
+web-sys = { version = "0.3.57", features = ['console', 'Document', 'Element', 'HtmlElement', 'KeyboardEvent', 'HtmlCanvasElement', 'WebGlBuffer', 'WebGlVertexArrayObject', 'WebGl2RenderingContext', 'WebGlProgram', 'WebGlShader', 'WebGlUniformLocation', 'Window', 'HtmlImageElement', 'WebGlTexture', 'HtmlAudioElement', 'HtmlMediaElement'] }
 
 # The `console_error_panic_hook` rlibcrate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

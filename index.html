@@ -9,6 +9,16 @@
 <body>
   <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
   <section class="game">
+    <div id="instructions" class="overlay">
+        <h1>Instructions</h1>
+        <ul>
+            <li>Use the left and right arrows to change the cannon angle.</li>
+            <li>Use the up and down arrows to change the cannon power.</li>
+            <li>Press spacebar to launch a rocket!</li>
+        </ul>
+
+        <button id="play">Play</button>
+    </div>
     <div class="ui-container">
       <h1 id="turn">Player <span id="player">1</span> Turn</h1>
       <h1>Power: <span id="power">0</span></h1>
@@ -16,6 +26,7 @@
 
     <canvas id="canvas">
     </canvas>
+    <audio id="background-music" src="assets/Heroic Demise (New).mp3" loop preload></audio>
   </section>
 
 </body>

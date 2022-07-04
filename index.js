@@ -5,6 +5,11 @@ import { start_game } from './pkg';
 
 start_game('canvas');
 
+document.getElementById('play').onclick = function() {
+    document.getElementById('instructions').remove();
+    document.getElementById('background-music').play();
+}
+
 window.addEventListener('message', function (message) {
     //console.log('Received message from game: ', message.data);
 
