@@ -18,7 +18,10 @@ use super::matrix::Mat4;
 
 use js_sys::Float32Array;
 use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{console, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext, WebGlTexture, HtmlAudioElement};
+use web_sys::{
+    console, HtmlAudioElement, HtmlCanvasElement, KeyboardEvent, WebGl2RenderingContext,
+    WebGlTexture,
+};
 
 struct Player {
     id: usize,
@@ -46,6 +49,7 @@ struct GameState {
     client_width: u32,
     client_height: u32,
     exiting: bool,
+    game_over: bool,
 }
 
 struct TankGameFlyweight {
@@ -323,6 +327,7 @@ fn initialize(
         client_width,
         client_height,
         exiting: false,
+        game_over: false,
     };
 
     update_ui(&game_state);
@@ -405,13 +410,12 @@ fn play_audio(audio: &HtmlAudioElement) {
     if audio.ready_state() >= 2 {
         match audio.play() {
             Err(..) => console::log_2(&"Could not play audio:".into(), &audio.src().into()),
-            _ => { }
+            _ => {}
         }
     }
 }
 
 fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
-    console::log_1(&key_code.into());
     let player = &mut game.game_state.players[game.game_state.current_player];
 
     match key_code {
@@ -556,11 +560,13 @@ fn update_ui(state: &GameState) {
             3 => "purple",
             _ => "yelow",
         })),
+        game_over: Some(state.game_over),
     })
     .expect("Could not post UI state");
 }
 
 fn next_turn(state: &mut GameState) {
+    let previous_player = state.current_player;
     for _ in 0..state.players.len() {
         state.current_player = (state.current_player + 1) % state.players.len();
 
@@ -568,6 +574,7 @@ fn next_turn(state: &mut GameState) {
             break;
         }
     }
+    state.game_over = previous_player == state.current_player;
 
     update_ui(state);
 }

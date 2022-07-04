@@ -26,4 +26,10 @@ window.addEventListener('message', function (message) {
     if (state.cannon_power) {
         document.getElementById('power').innerText = `${state.cannon_power}`;
     }
+
+    if (state.game_over) {
+        document.getElementById('winner').style = `color: ${state.player_color}`;
+        document.getElementById('winner-id').innerText = (state.current_player + 1) + "";
+        document.getElementById('game-over').style = '';
+    }
 });
