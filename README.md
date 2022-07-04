@@ -28,7 +28,7 @@ Then visit http://localhost:8080/ on your browser.
 
 https://github.com/simondarksidej/XNAGameStudio/wiki/Riemers2DXNAoverview
 
-Backgorund music is from: https://opengameart.org/content/heroic-demise-updated-version
+Background music is from: https://opengameart.org/content/heroic-demise-updated-version
 
 ### Rust
 
