@@ -1,6 +1,8 @@
 use std::ops::{Add, AddAssign, Sub};
 
-#[derive(Debug)]
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
 pub struct Vec3 {
     pub data: [f32; 3],
 }

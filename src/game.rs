@@ -50,6 +50,7 @@ struct GameState {
     client_height: u32,
     exiting: bool,
     game_over: bool,
+    save_state: bool
 }
 
 struct TankGameFlyweight {
@@ -71,14 +72,15 @@ struct TankGameFlyweight {
     launch_sound: HtmlAudioElement,
     hitcannon_sound: HtmlAudioElement,
     hitterrain_sound: HtmlAudioElement,
+    save_state_cb: Option<js_sys::Function>,
 }
 
 #[wasm_bindgen]
-pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
+pub fn start_game(canvas_id: &str, save_state_cb: js_sys::Function) -> Result<(), JsValue> {
     let canvas = get_canvas(canvas_id)?;
     let gl = get_rendering_context(&canvas)?;
 
-    let game = Rc::new(RefCell::new(initialize(&canvas, &gl)?));
+    let game = Rc::new(RefCell::new(initialize(&canvas, &gl, save_state_cb)?));
     let keydown_game_clone = game.clone();
     let keydown_callback = Closure::wrap(Box::new(move |e: &KeyboardEvent| {
         let mut game = keydown_game_clone.borrow_mut();
@@ -133,6 +135,27 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
 
         game.game_state.timestamp = timestamp;
 
+        if game.game_state.save_state {
+            if let Some(cb) = &game.save_state_cb {
+                let this = JsValue::null();
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"foo".into(), &"bar".into()).unwrap();
+
+                for player in &game.game_state.players {
+                    let pos = JsValue::from_serde(&player.carriage_sprite.global_position).unwrap();
+                    js_sys::Reflect::set(&obj, &format!("player{}", player.id).into(), &pos).unwrap();
+                }
+
+                if let Some(rocket) = &game.game_state.rocket {
+                    let pos = JsValue::from_serde(&rocket.sprite.global_position).unwrap();
+                    js_sys::Reflect::set(&obj, &"rocket".into(), &pos).unwrap();
+                }
+
+                cb.call1(&this, &obj).unwrap();
+                game.game_state.save_state = false;
+            }
+        }
+
         request_animation_frame(f.borrow().as_ref().unwrap());
     }) as Box<dyn FnMut(&JsValue)>));
 
@@ -144,6 +167,7 @@ pub fn start_game(canvas_id: &str) -> Result<(), JsValue> {
 fn initialize(
     canvas: &HtmlCanvasElement,
     gl: &WebGl2RenderingContext,
+    save_state_cb: js_sys::Function
 ) -> Result<TankGameFlyweight, JsValue> {
     set_panic_hook();
     console::log_1(&"Initializing tank game".into());
@@ -328,6 +352,7 @@ fn initialize(
         client_height,
         exiting: false,
         game_over: false,
+        save_state: false,
     };
 
     update_ui(&game_state);
@@ -351,6 +376,7 @@ fn initialize(
         hitcannon_sound,
         hitterrain_sound,
         render_shapes: false,
+        save_state_cb: Some(save_state_cb)
     })
 }
 
@@ -428,7 +454,10 @@ fn handle_keyboard_input(game: &mut TankGameFlyweight, key_code: &str) -> bool {
         "ArrowDown" => {
             player.cannon_power -= 5;
             update_ui(&game.game_state);
-        }
+        },
+        "s" => {
+            game.game_state.save_state = true;
+        },
         " " => {
             if game.game_state.rocket.is_none() {
                 let x = player.terrain_position;

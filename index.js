@@ -3,7 +3,22 @@ import './site.css';
 
 import { start_game } from './pkg';
 
-start_game('canvas');
+import JSZip from 'jszip';
+import FileSaver from 'file-saver';
+
+const zip = new JSZip();
+
+document.getElementById('save').addEventListener('click', () => {
+    zip.generateAsync({ type: 'blob' }).then(function (content) {
+        FileSaver.saveAs(content, 'download.zip');
+    });
+});
+
+start_game('canvas', (state) => {
+    let image = document.getElementById('canvas').toDataURL();
+    state.image = image;
+    zip.file(Date.now() + '.json', JSON.stringify(state));
+});
 
 document.getElementById('play').onclick = function() {
     document.getElementById('instructions').remove();

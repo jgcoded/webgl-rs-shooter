@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::JsValue;
 
-use crate::{dom::post_message};
+use crate::dom::post_message;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ui {
