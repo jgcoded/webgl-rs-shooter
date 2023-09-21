@@ -139,16 +139,39 @@ pub fn start_game(canvas_id: &str, save_state_cb: js_sys::Function) -> Result<()
             if let Some(cb) = &game.save_state_cb {
                 let this = JsValue::null();
                 let obj = js_sys::Object::new();
-                js_sys::Reflect::set(&obj, &"foo".into(), &"bar".into()).unwrap();
 
                 for player in &game.game_state.players {
                     let pos = JsValue::from_serde(&player.carriage_sprite.global_position).unwrap();
-                    js_sys::Reflect::set(&obj, &format!("player{}", player.id).into(), &pos).unwrap();
+                    js_sys::Reflect::set(&obj, &format!("player{}_pos", player.id).into(), &pos).unwrap();
+
+                    let carriage_scale = JsValue::from_serde(&player.carriage_sprite.global_scale).unwrap();
+                    js_sys::Reflect::set(&obj, &format!("player{}_carriage_scale", player.id).into(), &carriage_scale).unwrap();
+
+                    let carriage_local_pos = JsValue::from_serde(&player.carriage_sprite.local_position).unwrap();
+                    js_sys::Reflect::set(&obj, &format!("player{}_carriage_local_pos", player.id).into(), &carriage_local_pos).unwrap();
+
+                    let cannon_scale = JsValue::from_serde(&player.cannon_sprite.global_scale).unwrap();
+                    js_sys::Reflect::set(&obj, &format!("player{}_cannon_scale", player.id).into(), &cannon_scale).unwrap();
+
+                    let cannon_local_pos = JsValue::from_serde(&player.cannon_sprite.local_position).unwrap();
+                    js_sys::Reflect::set(&obj, &format!("player{}_cannon_local_pos", player.id).into(), &cannon_local_pos).unwrap();
+
+                    let cannon_rotation = JsValue::from_serde(&player.cannon_sprite.global_rotation).unwrap();
+                    js_sys::Reflect::set(&obj, &format!("player{}_cannon_rotation", player.id).into(), &cannon_rotation).unwrap();
                 }
 
                 if let Some(rocket) = &game.game_state.rocket {
                     let pos = JsValue::from_serde(&rocket.sprite.global_position).unwrap();
-                    js_sys::Reflect::set(&obj, &"rocket".into(), &pos).unwrap();
+                    js_sys::Reflect::set(&obj, &"rocket_pos".into(), &pos).unwrap();
+
+                    let scale = JsValue::from_serde(&rocket.sprite.global_scale).unwrap();
+                    js_sys::Reflect::set(&obj, &"rocket_scale".into(), &scale).unwrap();
+
+                    let local_pos = JsValue::from_serde(&rocket.sprite.local_position).unwrap();
+                    js_sys::Reflect::set(&obj, &"rocket_local_pos".into(), &local_pos).unwrap();
+
+                    let rotation = JsValue::from_serde(&rocket.sprite.global_rotation).unwrap();
+                    js_sys::Reflect::set(&obj, &"rocket_rotation".into(), &rotation).unwrap();
                 }
 
                 cb.call1(&this, &obj).unwrap();
